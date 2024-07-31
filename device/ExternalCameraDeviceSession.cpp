@@ -1661,6 +1661,7 @@ std::unique_ptr<V4L2Frame> ExternalCameraDeviceSession::dequeueV4l2FrameLocked(n
     int ts;
     fd_set fds;
     struct timeval tv;
+    int retry_num;
 
     FD_ZERO(&fds);
     FD_SET(mV4l2Fd.get(), &fds);
@@ -1703,8 +1704,9 @@ std::unique_ptr<V4L2Frame> ExternalCameraDeviceSession::dequeueV4l2FrameLocked(n
         buffer.length = PLANES_NUM;
     }
     buffer.memory = V4L2_MEMORY_MMAP;
+RETRY_DQBUF:
     if (TEMP_FAILURE_RETRY(ioctl(mV4l2Fd.get(), VIDIOC_DQBUF, &buffer)) < 0) {
-        ALOGE("%s: DQBUF fails: %s", __FUNCTION__, strerror(errno));
+        ALOGE("%s: VIDIOC_DQBUF fails: %s", __FUNCTION__, strerror(errno));
         return ret;
     }
     ATRACE_END();
@@ -1715,8 +1717,16 @@ std::unique_ptr<V4L2Frame> ExternalCameraDeviceSession::dequeueV4l2FrameLocked(n
     }
 
     if (buffer.flags & V4L2_BUF_FLAG_ERROR) {
-        ALOGE("%s: v4l2 buf error! buf flag 0x%x", __FUNCTION__, buffer.flags);
-        // TODO: try to dequeue again
+        ALOGE("%s: v4l2 buf error! buf flag 0x%x buffer.index:%d mBufFd:%d", __FUNCTION__, buffer.flags, buffer.index, mBufFd[buffer.index]);
+        if (TEMP_FAILURE_RETRY(ioctl(mV4l2Fd.get(), VIDIOC_QBUF, &buffer)) < 0) {
+            ALOGE("%s: VIDIOC_QBUF index %d fails: %s", __FUNCTION__, buffer.index, strerror(errno));
+            return ret;
+        }
+        if (retry_num < MAX_RETRY)
+        {
+            retry_num++;
+            goto RETRY_DQBUF;
+        }
     }
 
     if (buffer.bytesused > mMaxV4L2BufferSize) {
