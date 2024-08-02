@@ -3,6 +3,7 @@ cc_library_shared {
     srcs: ["data_bridge.cpp"],
     header_libs: [
         "jni_headers",
+        "libhardware_rockchip_headers",
     ],
     include_dirs: [
         "hardware/rockchip/librga",

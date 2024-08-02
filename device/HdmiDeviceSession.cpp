@@ -180,6 +180,7 @@ using ::aidl::android::hardware::camera::device::StreamType;
 using ::aidl::android::hardware::graphics::common::Dataspace;
 using ::android::hardware::camera::common::V1_0::helper::ExifUtils;
 using ::aidl::android::hardware::graphics::common::PixelFormat;
+using camera2::RgaCropScale;
 
 // Static instances
 const int HdmiDeviceSession::kMaxProcessedStream;
@@ -226,7 +227,6 @@ void HdmiDeviceSession::createPreviewBuffer(){
     param.width = tempWidth;
     param.height = tempHeight;
     param.format = HAL_PIXEL_FORMAT_YCrCb_NV12;
-    RockchipRga& rkRga(RockchipRga::get());
     for(int i = 0; i< mCfg.numVideoBuffers; i ++){
         int cached_handle = mFormatConvertThread->mMapGraphicBufferRgaHandle[i];
         if (cached_handle != 0)
@@ -236,8 +236,8 @@ void HdmiDeviceSession::createPreviewBuffer(){
         }
         sp<GraphicBuffer> buffer = GraphicBuffer_Init(tempWidth, tempHeight, HAL_PIXEL_FORMAT_YCrCb_NV12);
         int fd = -1;
-        int ret = rkRga.RkRgaGetBufferFd(buffer->handle, &fd);
-        if (ret){
+        fd = RgaCropScale::GetHandleFd(buffer->handle);
+        if (fd <= 0){
             ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(buffer->handle));
         }
         int handle = importbuffer_fd(fd, &param);
@@ -1717,7 +1717,6 @@ Status HdmiDeviceSession::importRequestLockedImpl(
             }
         }
     }
-    RockchipRga& rkRga(RockchipRga::get());
     for (size_t i = 0; i < numOutputBufs; i++) {
         std::unordered_map<int,buffer_handle_t> streamBufs =  mMapReqBuffers[request.outputBuffers[i].streamId];
         std::unordered_map<int,int> streamBufsRgaHandle =  mMapReqBuffersRgaHandler[request.outputBuffers[i].streamId];
@@ -1730,7 +1729,7 @@ Status HdmiDeviceSession::importRequestLockedImpl(
             //const native_handle_t* nh =(const native_handle_t*) allBufPtrs[i];
 
             int fd;
-            int ret = rkRga.RkRgaGetBufferFd(*allBufPtrs[i], &fd);
+            fd = RgaCropScale::GetHandleFd(*allBufPtrs[i]);
             im_handle_param_t param;
             if (stream.format == PixelFormat::YCRCB_420_SP)
                 param.format = HAL_PIXEL_FORMAT_YCrCb_420_SP;
@@ -2703,8 +2702,8 @@ int rga_scale_crop(
 
     memset(&src, 0, sizeof(rga_info_t));
     int src_fd,dst_fd;
-    ret = rkRga.RkRgaGetBufferFd(src_buf->handle, &src_fd);
-    if (ret){
+    src_fd = RgaCropScale::GetHandleFd(src_buf->handle);
+    if (src_fd <= 0){
         ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(src_buf->handle));
         return ret;
     }
@@ -2714,8 +2713,8 @@ int rga_scale_crop(
     src.mmuFlag = ((2 & 0x3) << 4) | 1 | (1 << 8) | (1 << 10);
     memset(&dst, 0, sizeof(rga_info_t));
 
-    ret = rkRga.RkRgaGetBufferFd(dst_buf->handle, &dst_fd);
-    if (ret){
+    dst_fd = RgaCropScale::GetHandleFd(dst_buf->handle);
+    if (dst_fd <= 0){
         ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(src_buf->handle));
         return ret;
     }
@@ -3995,13 +3994,24 @@ bool HdmiDeviceSession::OutputThread::threadLoop() {
             }break;
 
             case PixelFormat::YV12: {
-                IMapper::Rect outRect{0, 0, static_cast<int32_t>(halBuf.width),
+                android::Rect outRect{0, 0, static_cast<int32_t>(halBuf.width),
                                       static_cast<int32_t>(halBuf.height)};
-                YCbCrLayout outLayout = sHandleImporter.lockYCbCr(
-                        *(halBuf.bufPtr), static_cast<uint64_t>(halBuf.usage), outRect);
-                ALOGV("%s: outLayout y %p cb %p cr %p y_str %d c_str %d c_step %d", __FUNCTION__,
-                      outLayout.y, outLayout.cb, outLayout.cr, outLayout.yStride, outLayout.cStride,
-                      outLayout.chromaStep);
+                android_ycbcr result =
+                        sHandleImporter.lockYCbCr(*(halBuf.bufPtr), static_cast<uint64_t>(halBuf.usage), outRect);
+                ALOGV("%s: outLayout y %p cb %p cr %p y_str %zu c_str %zu c_step %zu", __FUNCTION__,
+                      result.y, result.cb, result.cr, result.ystride, result.cstride,
+                      result.chroma_step);
+                if (result.ystride > UINT32_MAX || result.cstride > UINT32_MAX ||
+                    result.chroma_step > UINT32_MAX) {
+                    return onDeviceError("%s: lockYCbCr failed. Unexpected values!", __FUNCTION__);
+                }
+                YCbCrLayout outLayout = {.y = result.y,
+                                         .cb = result.cb,
+                                         .cr = result.cr,
+                                         .yStride = static_cast<uint32_t>(result.ystride),
+                                         .cStride = static_cast<uint32_t>(result.cstride),
+                                         .chromaStep = static_cast<uint32_t>(result.chroma_step)};
+
 
                 // Convert to output buffer size/format
                 uint32_t outputFourcc = getFourCcFromLayout(outLayout);

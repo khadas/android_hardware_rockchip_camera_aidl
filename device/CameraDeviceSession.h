@@ -70,7 +70,8 @@ using aidl::android::hardware::graphics::common::PixelFormat;
 
 using ndk::ScopedAStatus;
 
-using ::android::hardware::camera::common::V1_0::helper::HandleImporter;
+using ::android::hardware::camera::external::common::helper::HandleImporter;
+
 
 using ::android::hardware::kSynchronizedReadWrite;
 using ::android::hardware::MessageQueue;

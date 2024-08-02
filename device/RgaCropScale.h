@@ -15,6 +15,8 @@
  */
 
 #ifndef HAL_ROCKCHIP_PSL_RKISP1_RGACROPSCALE_H_
+ #include <cutils/native_handle.h>
+
 namespace android {
 namespace camera2 {
 
@@ -81,6 +83,7 @@ class RgaCropScale {
 static int Im2dBlit(struct Params* in,  struct Params* out);
 static int CropScaleNV12Or21Async(struct Params* in, struct Params* out);
 static int WaitFenceDone(int fence_fd);
+static int GetHandleFd(buffer_handle_t buffer);
 };
 
 } /* namespace camera2 */

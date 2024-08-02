@@ -19,7 +19,7 @@
 #define LOG_NIDEBUG 0 //ALOGI
 #define LOG_NDDEBUG 0 //ALOGD
 
-//#undef NDEBUG ALL
+// #undef NDEBUG ALL
 
 #include <log/log.h>
 
@@ -73,6 +73,7 @@
 #include "iep2_api.h"
 
 #include <sys/stat.h>
+using camera2::RgaCropScale;
 
 #define ALIGN(b,w) (((b)+((w)-1))/(w)*(w))
 
@@ -339,7 +340,6 @@ ExternalCameraDeviceSession::ExternalCameraDeviceSession(
 void ExternalCameraDeviceSession::createPreviewBuffer(){
     int tempWidth = (mV4l2StreamingFmt.width + 15) & (~15);
     int tempHeight = (mV4l2StreamingFmt.height + 15) & (~15);
-    RockchipRga& rkRga(RockchipRga::get());
     int src_fd;
     int ret;
 
@@ -350,7 +350,7 @@ void ExternalCameraDeviceSession::createPreviewBuffer(){
         sp<GraphicBuffer> buffer = mFormatConvertThread->mMapGraphicBuffer[i];
         buffer->lock(GRALLOC_USAGE_SW_WRITE_OFTEN | GRALLOC_USAGE_SW_READ_OFTEN, (void**)&mFormatConvertThread->mVirAddrs[i]);
         buffer->unlock();
-        ret = rkRga.RkRgaGetBufferFd(buffer->handle, &src_fd);
+        src_fd = RgaCropScale::GetHandleFd(buffer->handle);
         mFormatConvertThread->mShareFds[i] = src_fd;
         ALOGD("alloc buffer %d W:H=%dx%d, fd:0x%x.", i, tempWidth, tempHeight, src_fd);
     }
@@ -364,7 +364,7 @@ void ExternalCameraDeviceSession::createPreviewBuffer(){
             sp<GraphicBuffer> buffer = mFormatConvertThread->mMapGraphicBuffer[mCfg.numVideoBuffers+i];
             buffer->lock(GRALLOC_USAGE_SW_WRITE_OFTEN | GRALLOC_USAGE_SW_READ_OFTEN, (void**)&mFormatConvertThread->mIepVirAddr[i]);
             buffer->unlock();
-            ret = rkRga.RkRgaGetBufferFd(buffer->handle, &src_fd);
+            src_fd= RgaCropScale::GetHandleFd(buffer->handle);
             mFormatConvertThread->mIepShareFd[i]  = src_fd;
 
             ALOGD("alloc Temp iep buffer %d W:H=%dx%d, fd:0x%x.", i, tempWidth, tempHeight, src_fd);
@@ -2812,17 +2812,16 @@ REDEQUE:
             parent->isNeedCheckIFrame = false;
             ALOGI("don't need I frame");
         }
-        RockchipRga& rkRga(RockchipRga::get());
         sp<GraphicBuffer> buffer =mFormatConvertThread-> mMapGraphicBuffer[frameIn->mBufferIndex];
         buffer->lock(GRALLOC_USAGE_SW_WRITE_OFTEN | GRALLOC_USAGE_SW_READ_OFTEN, (void**)&req->mVirAddr);
         buffer->unlock();
         int src_fd;
-        int ret = rkRga.RkRgaGetBufferFd(buffer->handle, &src_fd);
-        if (ret){
+        src_fd = RgaCropScale::GetHandleFd(buffer->handle);
+        if (src_fd <= 0){
             ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(buffer->handle));
         }
         req->mShareFd = src_fd;
-        ret = mFormatConvertThread->h264Decoder(req->frameNumber, inData, inDataSize);
+        int ret = mFormatConvertThread->h264Decoder(req->frameNumber, inData, inDataSize);
         if (ret == VPU_EAGAIN) {
             parent->enqueueV4l2Frame(frameIn);
             goto REDEQUE;
@@ -3080,8 +3079,8 @@ int rga_scale_crop(
 
     memset(&src, 0, sizeof(rga_info_t));
     int src_fd,dst_fd;
-    ret = rkRga.RkRgaGetBufferFd(src_buf->handle, &src_fd);
-    if (ret){
+    src_fd = RgaCropScale::GetHandleFd(src_buf->handle);
+    if (src_fd <= 0){
         ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(src_buf->handle));
         return ret;
     }
@@ -3091,8 +3090,8 @@ int rga_scale_crop(
     src.mmuFlag = ((2 & 0x3) << 4) | 1 | (1 << 8) | (1 << 10);
     memset(&dst, 0, sizeof(rga_info_t));
 
-    ret = rkRga.RkRgaGetBufferFd(dst_buf->handle, &dst_fd);
-    if (ret){
+    dst_fd = RgaCropScale::GetHandleFd(dst_buf->handle);
+    if (dst_fd <= 0){
         ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(src_buf->handle));
         return ret;
     }
@@ -4485,7 +4484,7 @@ bool ExternalCameraDeviceSession::OutputThread::threadLoop() {
         return onDeviceError("%s: failed to process buffer request error!", __FUNCTION__);
     }
     LOG_FRAME_PRETTY(req->cameraId, req->frameNumber,&req->reqTime);
-    // ALOGV("%s processing new request", __FUNCTION__);
+    //ALOGV("%s processing new request req->mShareFd:%d", __FUNCTION__, req->mShareFd);
     const int kSyncWaitTimeoutMs = 500;
     for (auto& halBuf : req->buffers) {
         if (*(halBuf.bufPtr) == nullptr) {
@@ -4538,14 +4537,24 @@ bool ExternalCameraDeviceSession::OutputThread::threadLoop() {
                         static_cast<uint8_t*>(mYu12FrameLayout.cr), mYu12FrameLayout.cStride,
                         mYu12Frame->mWidth, mYu12Frame->mHeight);
                     ATRACE_END();
-                    IMapper::Rect outRect {0, 0,
-                            static_cast<int32_t>(halBuf.width),
-                            static_cast<int32_t>(halBuf.height)};
-                    YCbCrLayout outLayout = sHandleImporter.lockYCbCr(
-                            *(halBuf.bufPtr), static_cast<uint64_t>(halBuf.usage), outRect);
-                    ALOGV("%s: outLayout y %p cb %p cr %p y_str %d c_str %d c_step %d",
-                            __FUNCTION__, outLayout.y, outLayout.cb, outLayout.cr,
-                            outLayout.yStride, outLayout.cStride, outLayout.chromaStep);
+                    android::Rect outRect{0, 0, static_cast<int32_t>(halBuf.width),
+                                        static_cast<int32_t>(halBuf.height)};
+                    android_ycbcr result =
+                            sHandleImporter.lockYCbCr(*(halBuf.bufPtr), static_cast<uint64_t>(halBuf.usage), outRect);
+                    ALOGV("%s: outLayout y %p cb %p cr %p y_str %zu c_str %zu c_step %zu", __FUNCTION__,
+                        result.y, result.cb, result.cr, result.ystride, result.cstride,
+                        result.chroma_step);
+                    if (result.ystride > UINT32_MAX || result.cstride > UINT32_MAX ||
+                        result.chroma_step > UINT32_MAX) {
+                        return onDeviceError("%s: lockYCbCr failed. Unexpected values!", __FUNCTION__);
+                    }
+                    YCbCrLayout outLayout = {.y = result.y,
+                                            .cb = result.cb,
+                                            .cr = result.cr,
+                                            .yStride = static_cast<uint32_t>(result.ystride),
+                                            .cStride = static_cast<uint32_t>(result.cstride),
+                                            .chromaStep = static_cast<uint32_t>(result.chroma_step)};
+
 
                     // Convert to output buffer size/format
                     uint32_t outputFourcc = getFourCcFromLayout(outLayout);
@@ -4592,10 +4601,8 @@ bool ExternalCameraDeviceSession::OutputThread::threadLoop() {
 
                     const native_handle_t* tmp_hand = (const native_handle_t*)(*(halBuf.bufPtr));
 
-
-                    RockchipRga& rkRga(RockchipRga::get());
-                    ret = rkRga.RkRgaGetBufferFd(tmp_hand, &handle_fd);
-                    if (ret){
+                    handle_fd = RgaCropScale::GetHandleFd(tmp_hand);
+                    if (handle_fd <= 0) {
                         ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(tmp_hand));
                         return true;
                     }
@@ -4612,8 +4619,7 @@ bool ExternalCameraDeviceSession::OutputThread::threadLoop() {
 
                     int handle_fd = -1, ret;
                     const native_handle_t* tmp_hand = (const native_handle_t*)(*(halBuf.bufPtr));
-                    RockchipRga& rkRga(RockchipRga::get());
-                    ret = rkRga.RkRgaGetBufferFd(tmp_hand, &handle_fd);
+                    handle_fd = RgaCropScale::GetHandleFd(tmp_hand);
 
                     if (handle_fd == -1) {
                         ALOGE("convert tmp_hand to dst_fd error");
@@ -4676,9 +4682,9 @@ bool ExternalCameraDeviceSession::OutputThread::threadLoop() {
                     }
                     const native_handle_t* tmp_hand = (const native_handle_t*)(*(halBuf.bufPtr));
                     int handle_fd;
-                    RockchipRga& rkRga(RockchipRga::get());
-                    int ret = rkRga.RkRgaGetBufferFd(tmp_hand, &handle_fd);
-                    if (ret){
+                    int ret = -1;
+                    handle_fd = RgaCropScale::GetHandleFd(tmp_hand);
+                    if (handle_fd <= 0) {
                         ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(tmp_hand));
                         return true;
                     }
@@ -4710,14 +4716,24 @@ bool ExternalCameraDeviceSession::OutputThread::threadLoop() {
                     LOGV("%s: digital zoom by RGA start!\n", __FUNCTION__);
                     if (camera2::RgaCropScale::CropScaleNV12Or21(&rgain, &rgaout)) {
                         ALOGW("%s: digital zoom by RGA failed, use software scale!\n", __FUNCTION__);
-                        IMapper::Rect outRect {0, 0,
-                                static_cast<int32_t>(halBuf.width),
-                                static_cast<int32_t>(halBuf.height)};
-                        YCbCrLayout outLayout = sHandleImporter.lockYCbCr(
-                                *(halBuf.bufPtr), static_cast<uint64_t>(halBuf.usage), outRect);
-                        ALOGV("%s: outLayout y %p cb %p cr %p y_str %d c_str %d c_step %d",
-                                __FUNCTION__, outLayout.y, outLayout.cb, outLayout.cr,
-                                outLayout.yStride, outLayout.cStride, outLayout.chromaStep);
+                        android::Rect outRect{0, 0, static_cast<int32_t>(halBuf.width),
+                                            static_cast<int32_t>(halBuf.height)};
+                        android_ycbcr result =
+                                sHandleImporter.lockYCbCr(*(halBuf.bufPtr), static_cast<uint64_t>(halBuf.usage), outRect);
+                        ALOGV("%s: outLayout y %p cb %p cr %p y_str %zu c_str %zu c_step %zu", __FUNCTION__,
+                            result.y, result.cb, result.cr, result.ystride, result.cstride,
+                            result.chroma_step);
+                        if (result.ystride > UINT32_MAX || result.cstride > UINT32_MAX ||
+                            result.chroma_step > UINT32_MAX) {
+                            return onDeviceError("%s: lockYCbCr failed. Unexpected values!", __FUNCTION__);
+                        }
+                        YCbCrLayout outLayout = {.y = result.y,
+                                                .cb = result.cb,
+                                                .cr = result.cr,
+                                                .yStride = static_cast<uint32_t>(result.ystride),
+                                                .cStride = static_cast<uint32_t>(result.cstride),
+                                                .chromaStep = static_cast<uint32_t>(result.chroma_step)};
+
 
                         // Convert to output buffer size/format
                         uint32_t outputFourcc = getFourCcFromLayout(outLayout);
@@ -4761,13 +4777,24 @@ bool ExternalCameraDeviceSession::OutputThread::threadLoop() {
             }break;
 
             case PixelFormat::YV12: {
-                IMapper::Rect outRect{0, 0, static_cast<int32_t>(halBuf.width),
+                android::Rect outRect{0, 0, static_cast<int32_t>(halBuf.width),
                                       static_cast<int32_t>(halBuf.height)};
-                YCbCrLayout outLayout = sHandleImporter.lockYCbCr(
-                        *(halBuf.bufPtr), static_cast<uint64_t>(halBuf.usage), outRect);
-                ALOGV("%s: outLayout y %p cb %p cr %p y_str %d c_str %d c_step %d", __FUNCTION__,
-                      outLayout.y, outLayout.cb, outLayout.cr, outLayout.yStride, outLayout.cStride,
-                      outLayout.chromaStep);
+                android_ycbcr result =
+                        sHandleImporter.lockYCbCr(*(halBuf.bufPtr), static_cast<uint64_t>(halBuf.usage), outRect);
+                ALOGV("%s: outLayout y %p cb %p cr %p y_str %zu c_str %zu c_step %zu", __FUNCTION__,
+                      result.y, result.cb, result.cr, result.ystride, result.cstride,
+                      result.chroma_step);
+                if (result.ystride > UINT32_MAX || result.cstride > UINT32_MAX ||
+                    result.chroma_step > UINT32_MAX) {
+                    return onDeviceError("%s: lockYCbCr failed. Unexpected values!", __FUNCTION__);
+                }
+                YCbCrLayout outLayout = {.y = result.y,
+                                         .cb = result.cb,
+                                         .cr = result.cr,
+                                         .yStride = static_cast<uint32_t>(result.ystride),
+                                         .cStride = static_cast<uint32_t>(result.cstride),
+                                         .chromaStep = static_cast<uint32_t>(result.chroma_step)};
+
 
                 // Convert to output buffer size/format
                 uint32_t outputFourcc = getFourCcFromLayout(outLayout);
@@ -4805,8 +4832,7 @@ bool ExternalCameraDeviceSession::OutputThread::threadLoop() {
 #ifdef OSD_ENABLE
         const native_handle_t* tmp_hand = (const native_handle_t*)(*(halBuf.bufPtr));
         int handle_fd = -1;
-        RockchipRga& rkRga(RockchipRga::get());
-        rkRga.RkRgaGetBufferFd(tmp_hand, &handle_fd);
+        handle_fd = RgaCropScale::GetHandleFd(tmp_hand);
         if (handle_fd!= -1)
         {
             android::hardware::camera::device::V3_4::implementation::processOSD(halBuf.width,halBuf.height,handle_fd,cameraId);

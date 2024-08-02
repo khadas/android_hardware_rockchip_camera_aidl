@@ -49,6 +49,8 @@
 
 #include <android/hardware_buffer_jni.h>
 #include <vndk/hardware_buffer.h>
+#include <hardware/hardware_rockchip.h>
+
 
 #include <condition_variable>
 #include <unordered_map>

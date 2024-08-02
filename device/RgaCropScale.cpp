@@ -21,6 +21,10 @@
 #include "im2d_api/im2d.hpp"
 #include "im2d_api/im2d_common.h"
 #include "log.h"
+#include <hardware/hardware_rockchip.h>
+#include <android/hardware/graphics/mapper/4.0/IMapper.h>
+using android::hardware::graphics::mapper::V4_0::IMapper;
+
 
 #define LOG_TAG "RgaCropScale"
 
@@ -39,6 +43,80 @@ namespace camera2 {
 #define RGA_ACTIVE_H (2048)
 #define RGA_VIRTUAL_H (2048)
 #endif
+
+static IMapper &get_mapperservice()
+{
+    static android::sp<IMapper> cached_service = IMapper::getService();
+    return *cached_service;
+}
+template <typename T>
+
+static int get_metadata(IMapper &mapper, buffer_handle_t handle,  android::hardware::graphics::mapper::V4_0::IMapper::MetadataType type,
+                        android::status_t (*decode)(const  hardware::hidl_vec<uint8_t> &, T *), T *value)
+{
+	void *handle_arg = const_cast<native_handle_t *>(handle);
+	assert(handle_arg);
+	assert(value);
+	assert(decode);
+
+	int err = 0;
+	mapper.get(handle_arg, type, [&err, value, decode](android::hardware::graphics::mapper::V4_0::Error error, const  hardware::hidl_vec<uint8_t> &metadata)
+	            {
+		            if (error != android::hardware::graphics::mapper::V4_0::Error::NONE)
+		            {
+			            err = android::BAD_VALUE;
+			            return;
+		            }
+		            err = decode(metadata, value);
+		        });
+	return err;
+}
+android::status_t static decodeArmPlaneFds(const  hardware::hidl_vec<uint8_t>& input, std::vector<int64_t>* fds)
+{
+    assert (fds != nullptr);
+    int64_t size = 0;
+
+    memcpy(&size, input.data(), sizeof(int64_t));
+    if (size < 0)
+    {
+        return android::BAD_VALUE;
+    }
+
+    fds->resize(size);
+
+    const uint8_t *tmp = input.data() + sizeof(int64_t);
+    memcpy(fds->data(), tmp, sizeof(int64_t) * size);
+
+    return android::NO_ERROR;
+}
+#define GRALLOC_ARM_METADATA_TYPE_NAME "arm.graphics.ArmMetadataType"
+const static IMapper::MetadataType ArmMetadataType_PLANE_FDS
+{
+	GRALLOC_ARM_METADATA_TYPE_NAME,
+	// static_cast<int64_t>(aidl::arm::graphics::ArmMetadataType::PLANE_FDS)
+    1   // 就是上面的 'PLANE_FDS'
+};
+
+int RgaCropScale::GetHandleFd(buffer_handle_t buffer) {
+    LOGD("GetHandleFd buffer:%p", buffer);
+    int fd = -1;
+
+    auto &mapper = get_mapperservice();
+    std::vector<int64_t> fds;
+
+    int err = get_metadata(mapper, buffer, ArmMetadataType_PLANE_FDS, decodeArmPlaneFds, &fds);
+    if (err != android::OK)
+    {
+        ALOGE("Failed to get plane_fds. err : %d", err);
+        return err;
+    }
+    assert (fds.size() > 0);
+
+    fd = (int)(fds[0]);
+
+    return fd;
+}
+
 
 int RgaCropScale::CropScaleNV12Or21(struct Params* in, struct Params* out)
 {
@@ -94,11 +172,11 @@ int RgaCropScale::CropScaleNV12Or21(struct Params* in, struct Params* out)
         dst.fd = -1;
         dst.virAddr = (void*)out->vir_addr;
         dst_handle = importbuffer_virtualaddr(dst.virAddr, &param);
-        ALOGD("@%s,dst virtual:%p,width:%d,height:%d",__FUNCTION__,dst.virAddr,param.width,param.height);
+        LOGD("@%s,dst virtual:%p,width:%d,height:%d",__FUNCTION__,dst.virAddr,param.width,param.height);
     } else {
         dst.fd = out->fd;
         dst_handle = importbuffer_fd(dst.fd, &param);
-        ALOGD("@%s, dst fd:%d,width:%d,height:%d",__FUNCTION__,dst.fd,param.width,param.height);
+        LOGD("@%s, dst fd:%d,width:%d,height:%d",__FUNCTION__,dst.fd,param.width,param.height);
     }
     dst.mmuFlag = ((2 & 0x3) << 4) | 1 | (1 << 8) | (1 << 10);
 

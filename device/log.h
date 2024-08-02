@@ -19,9 +19,9 @@
 
 #define NDEBUG_V 0
 
-// #define LOG_NDEBUG 0 //ALOGV
-// #define LOG_NIDEBUG 0 //ALOGI
-// #define LOG_NDDEBUG 0 //ALOGD
+#define LOG_NDEBUG 0 //ALOGV
+#define LOG_NIDEBUG 0 //ALOGI
+#define LOG_NDDEBUG 0 //ALOGD
 
 
 #ifndef NDEBUG_V

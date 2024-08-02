@@ -18,13 +18,16 @@
 #define HARDWARE_INTERFACES_CAMERA_DEVICE_DEFAULT_EXTERNALCAMERAUTILS_H_
 
 #include <CameraMetadata.h>
-#include <HandleImporter.h>
+#include "HandleImporter.h"
 #include <aidl/android/hardware/camera/common/Status.h>
 #include <aidl/android/hardware/camera/device/CaptureResult.h>
 #include <aidl/android/hardware/camera/device/ErrorCode.h>
 #include <aidl/android/hardware/camera/device/NotifyMsg.h>
 #include <aidl/android/hardware/graphics/common/BufferUsage.h>
 #include <aidl/android/hardware/graphics/common/PixelFormat.h>
+#include <android/hardware/graphics/mapper/4.0/IMapper.h>
+
+
 #include <tinyxml2.h>
 #include <unordered_map>
 #include <unordered_set>
@@ -32,6 +35,7 @@
 #ifdef RK_DEVICE
 #include "rk_type.h"
 #include "vpu_api.h"
+#include <hardware/hardware_rockchip.h>
 #endif
 
 using ::aidl::android::hardware::camera::common::Status;
@@ -41,7 +45,12 @@ using ::aidl::android::hardware::camera::device::NotifyMsg;
 using ::aidl::android::hardware::graphics::common::BufferUsage;
 using ::aidl::android::hardware::graphics::common::PixelFormat;
 using ::android::hardware::camera::common::V1_0::helper::CameraMetadata;
-using ::android::hardware::camera::common::V1_0::helper::HandleImporter;
+using ::android::hardware::camera::external::common::helper::HandleImporter;
+using ::android::hardware::camera::external::common::helper::YCbCrLayout;
+using android::hardware::graphics::mapper::V4_0::IMapper;
+
+
+
 
 namespace android {
 namespace hardware {
@@ -49,6 +58,8 @@ namespace camera {
 
 namespace external {
 namespace common {
+
+
 
 struct Size {
     int32_t width;

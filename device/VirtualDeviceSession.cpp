@@ -2269,8 +2269,8 @@ int rga_scale_crop(
 
     memset(&src, 0, sizeof(rga_info_t));
     int src_fd,dst_fd;
-    ret = rkRga.RkRgaGetBufferFd(src_buf->handle, &src_fd);
-    if (ret){
+    src_fd = camera2::RgaCropScale::GetHandleFd(src_buf->handle);
+    if (src_fd <= 0){
         ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(src_buf->handle));
         return ret;
     }
@@ -2280,8 +2280,8 @@ int rga_scale_crop(
     src.mmuFlag = ((2 & 0x3) << 4) | 1 | (1 << 8) | (1 << 10);
     memset(&dst, 0, sizeof(rga_info_t));
 
-    ret = rkRga.RkRgaGetBufferFd(dst_buf->handle, &dst_fd);
-    if (ret){
+    dst_fd = camera2::RgaCropScale::GetHandleFd(dst_buf->handle);
+    if (dst_fd <= 0){
         ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(src_buf->handle));
         return ret;
     }
@@ -2451,9 +2451,8 @@ bool VirtualDeviceSession::FormatConvertThread::threadLoop() {
     sp<GraphicBuffer> buffer = mMapGraphicBuffer[req->index];
     buffer->lock(GRALLOC_USAGE_SW_WRITE_OFTEN | GRALLOC_USAGE_SW_READ_OFTEN, (void**)&req->mVirAddr);
     buffer->unlock();
-    int src_fd,dst_fd;
-    int ret = rkRga.RkRgaGetBufferFd(buffer->handle, &src_fd);
-    if (ret){
+    int src_fd = camera2::RgaCropScale::GetHandleFd(buffer->handle);
+    if (src_fd <= 0){
         ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(buffer->handle));
         return true;
     }
@@ -3396,8 +3395,8 @@ bool VirtualDeviceSession::OutputThread::threadLoop() {
                     const native_handle_t* tmp_hand = (const native_handle_t*)(*(halBuf.bufPtr));
                     int handle_fd;
                     RockchipRga& rkRga(RockchipRga::get());
-                    int ret = rkRga.RkRgaGetBufferFd(tmp_hand, &handle_fd);
-                    if (ret){
+                    handle_fd = camera2::RgaCropScale::GetHandleFd(tmp_hand);
+                    if (handle_fd <= 0){
                         ALOGE("%s: get buffer fd fail: %s, buffer_handle_t=%p",__FUNCTION__, strerror(errno), (void*)(tmp_hand));
                         return true;
                     }

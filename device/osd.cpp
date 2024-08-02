@@ -36,6 +36,8 @@
 #include <ui/GraphicBuffer.h>
 #include <ui/GraphicBufferAllocator.h>
 #include <ui/GraphicBufferMapper.h>
+#include <hardware/hardware_rockchip.h>
+
 
 #include <unordered_map>
 #include <sys/stat.h>
@@ -456,7 +458,7 @@ void processOSD(int width,int height,unsigned long dst_fd,int index){
   osd_time_pos_y -= 16;
 
   //ALOGD("osd_time_pos_x:%d,osd_time_pos_y:%d",osd_time_pos_x,osd_time_pos_y);
-  rkRga.RkRgaGetBufferFd(textHandle, &timeOsdFd);
+  timeOsdFd = camera2::RgaCropScale::GetHandleFd(textHandle);
   rgain.fd = timeOsdFd;
 	rgain.fmt = HAL_PIXEL_FORMAT_RGBA_8888;
 	rgain.vir_addr = nullptr;
@@ -490,7 +492,7 @@ void processOSD(int width,int height,unsigned long dst_fd,int index){
     osd_logo_pos_y -= 16;
 
     //ALOGD("osd_logo_pos_x:%d,osd_logo_pos_y:%d",osd_logo_pos_x,osd_logo_pos_y);
-    rkRga.RkRgaGetBufferFd(memHandle, &labelOsdFd);
+    labelOsdFd = camera2::RgaCropScale::GetHandleFd(memHandle);
     rgain0.fd = labelOsdFd;
     rgain0.fmt = HAL_PIXEL_FORMAT_RGBA_8888;
     rgain0.vir_addr = nullptr;

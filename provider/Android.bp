@@ -13,6 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+soong_config_module_type {
+    name: "camera_rockchip_soong_gen_defaults",
+    module_type: "cc_defaults",
+    config_namespace: "camera_rockchip",
+    bool_variables: [
+        "virtual",
+    ],
+    properties: ["cflags"],
+}
 
 cc_library_shared {
     name: "android.hardware.camera.provider-V1-external-impl-rk",
@@ -40,6 +49,7 @@ cc_library_shared {
         "liblog",
         "libtinyxml2",
         "libutils",
+        "libui",
     ],
     static_libs: [
         "android.hardware.camera.common@1.0-helper",
@@ -80,6 +90,7 @@ cc_defaults {
         "liblog",
         "libtinyxml2",
         "libutils",
+        "libui",
     ],
     static_libs: [
         "android.hardware.camera.common@1.0-helper",
@@ -110,6 +121,7 @@ cc_binary {
     relative_install_path: "hw",
     init_rc: ["android.hardware.camera.provider-V1-service.rc"],
     vintf_fragments: ["android.hardware.camera.provider-V1-service.xml"],
+    defaults:["camera_rockchip_gen_defaults"],
     srcs: [
         "CameraProvider.cpp",
         "main.cpp",
@@ -153,14 +165,6 @@ cc_binary {
     header_libs: [
 
     ],
-    product_variables: {
-       cameraSupportVirtual: {
-           cppflags:[
-               "-DCAMERA_SUPPORT_VIRTUAL",
-           ],
-       }
-    },
-
     cflags: [
         "-Wno-error",
         "-DLOG_TAG=\"camera.provider.internal\"",

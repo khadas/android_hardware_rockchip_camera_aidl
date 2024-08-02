@@ -107,7 +107,7 @@ ScopedAStatus CameraProvider::getVendorTags(std::vector<VendorTagSection>* vts) 
         }
         vts->resize(numSections);
         for (size_t s = 0; s < numSections; s++) {
-            (*vts)[s].sectionName = (*sectionNames)[s].string();
+            (*vts)[s].sectionName = (*sectionNames)[s].c_str();
             (*vts)[s].tags = tagsBySection[s];
         }
     }
