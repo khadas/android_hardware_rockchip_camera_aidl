@@ -502,9 +502,14 @@ ScopedAStatus CameraDeviceSession::configureStreams(
         mStreamBufferCache.clearStreamInfo();
         for (uint32_t i = 0; i < stream_list.num_streams; i++) {
             camera3_stream_t* stream = streams[i];
-            halStreams[i].producerUsage =  static_cast<BufferUsage>(stream->usage |
-                          RK_GRALLOC_USAGE_RANGE_FULL | RK_GRALLOC_USAGE_YUV_COLOR_SPACE_BT601);
-            ALOGD("stream:%d %dx%d priv:%p",i,stream->width,stream->height,stream->priv);
+            if (stream->format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED)
+                halStreams[i].producerUsage =  static_cast<BufferUsage>(stream->usage |
+                              RK_GRALLOC_USAGE_RANGE_FULL | RK_GRALLOC_USAGE_YUV_COLOR_SPACE_BT601);
+            else
+                halStreams[i].producerUsage =  static_cast<BufferUsage>(stream->usage);
+
+            ALOGD("@%s: Id:%d %dx%d format:0x%x, priv:%p", __FUNCTION__,
+                  cfg.streams[i].id,stream->width,stream->height,stream->format, stream->priv);
         }
 
         *halStreamsOut = std::move(halStreams);

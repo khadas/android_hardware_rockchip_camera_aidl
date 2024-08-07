@@ -769,6 +769,9 @@ ScopedAStatus ExternalCameraDeviceSession::configureStreams(
         out[i].overrideDataSpace = in_requestedConfiguration.streams[i].dataSpace;
         out[i].id = in_requestedConfiguration.streams[i].id;
         // TODO: double check should we add those CAMERA flags
+        int64_t exUsage = 0;
+        if (in_requestedConfiguration.streams[i].format == PixelFormat::IMPLEMENTATION_DEFINED)
+            exUsage = RK_GRALLOC_USAGE_RANGE_FULL;
         mStreamMap[in_requestedConfiguration.streams[i].id].usage = out[i].producerUsage =
                 static_cast<BufferUsage>(((int64_t)in_requestedConfiguration.streams[i].usage) |
                                          ((int64_t)BufferUsage::CPU_WRITE_OFTEN) |
@@ -777,7 +780,7 @@ ScopedAStatus ExternalCameraDeviceSession::configureStreams(
                                          ((int64_t)RK_GRALLOC_USAGE_SPECIFY_STRIDE) |
                                          ((int64_t)RK_GRALLOC_USAGE_RGA_ACCESS) |
                                          ((int64_t)GRALLOC_USAGE_PRIVATE_1) |
-                                         ((int64_t)RK_GRALLOC_USAGE_RANGE_FULL) |
+                                         exUsage|
                                          ((int64_t)BufferUsage::CAMERA_OUTPUT));
         out[i].consumerUsage = static_cast<BufferUsage>(0);
         out[i].maxBuffers = static_cast<int32_t>(mV4L2BufferCount);
