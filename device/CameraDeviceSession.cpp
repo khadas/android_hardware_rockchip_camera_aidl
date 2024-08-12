@@ -1462,8 +1462,9 @@ void CameraDeviceSession::processCaptureResult(
             settingsTmp = partialMetadata;
             if (exposureTimeResult.count && exposureTimeResult.data.i64[0] > 0 &&
                 exposureTimeResult.data.i64[0] !=mSensorExposureTimeNs) {
-                mSensorExposureTimeNs = exposureTimeResult.data.i64[0];
+                //mSensorExposureTimeNs = exposureTimeResult.data.i64[0];
                 settingsTmp.update(ANDROID_SENSOR_EXPOSURE_TIME, &mSensorExposureTimeNs, 1);
+                mSensorExposureTimeNs = exposureTimeResult.data.i64[0];
             }
             partialMetadata = const_cast<camera_metadata_t*>(settingsTmp.getAndLock());
             metadata = metadataCompactRaw(partialMetadata);
@@ -1959,8 +1960,9 @@ void CameraDeviceSession::sNotify(
                 if(frameNumber > 1){
                     exposureTime = d->getSensorExposureTime();
                 }
-                readoutTimestamp += exposureTime;
-
+                readoutTimestamp = timestamp + exposureTime;
+                ALOGV("@%s, timestamp: %llu Ns, exposureTime:%llu Ns, readoutTimestamp:%llu Ns",
+                    __FUNCTION__, timestamp, exposureTime, readoutTimestamp);
                 shutter.set<NotifyMsg::Tag::shutter>(
                         ShutterMsg{
                             .frameNumber = frameNumber,
@@ -1969,6 +1971,8 @@ void CameraDeviceSession::sNotify(
                 d->notify(shutter);
             }
             break;
+
+
         default:
             ALOGE("%s: AIDL type converion failed. Unknown msg type 0x%x",
                     __FUNCTION__, msg->type);
