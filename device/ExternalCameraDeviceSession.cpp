@@ -115,6 +115,7 @@ constexpr int IOCTL_RETRY_SLEEP_US = 33000;  // 33ms * MAX_RETRY = 0.5 seconds
 // Constants for tryLock during dumpstate
 static constexpr int kDumpLockRetries = 50;
 static constexpr int kDumpLockSleep = 60000;
+constexpr int64_t kDefaultSensorExposureTimeNs = 33333333;
 
 bool tryLock(Mutex& mutex) {
     bool locked = false;
@@ -2097,9 +2098,13 @@ void ExternalCameraDeviceSession::cleanupBuffersLocked(int id) {
 
 void ExternalCameraDeviceSession::notifyShutter(int32_t frameNumber, nsecs_t shutterTs) {
     NotifyMsg msg;
+
+    /* add readoutTimestamp > timestamp */
+    nsecs_t readoutTimestamp = shutterTs + kDefaultSensorExposureTimeNs;
     msg.set<NotifyMsg::Tag::shutter>(ShutterMsg{
             .frameNumber = frameNumber,
             .timestamp = shutterTs,
+            .readoutTimestamp = readoutTimestamp,
     });
     mCallback->notify({msg});
 }
