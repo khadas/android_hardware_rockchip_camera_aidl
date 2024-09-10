@@ -19,7 +19,7 @@
 #include <numeric>
 #include <string_view>
 #include <math.h>
-
+#include <cutils/properties.h>
 #include <log/log.h>
 
 #include "debug.h"
@@ -216,6 +216,7 @@ bool listRkCameras(const std::function<void(HwCameraFactory)>& cameraSink) {
         ALOGE("%s: Vendor tag setup failed, will not be available.", __FUNCTION__);
     }
     int cameraNumber = module->getNumberOfCameras();
+    property_set("persist.vendor.camera.numbers", std::to_string(cameraNumber).c_str());
     ALOGD("cameraNumber:%d",cameraNumber);
     for (int i = 0; i < cameraNumber; i++) {
         struct camera_info info;

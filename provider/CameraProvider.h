@@ -27,6 +27,7 @@
 #include "hardware/camera_common.h"
 #include "utils/Mutex.h"
 #include "utils/SortedVector.h"
+#include <SimpleThread.h>
 #include "CameraModule.h"
 #include <map>
 
@@ -48,7 +49,7 @@ using aidl::android::hardware::camera::common::CameraDeviceStatus;
 using ::AStatus;
 using aidl::android::hardware::camera::common::TorchModeStatus;
 using aidl::android::hardware::camera::common::VendorTag;
-
+using ::android::hardware::camera::common::helper::SimpleThread;
 using ::android::hardware::camera::common::V1_0::helper::CameraModule;
 using common::helper::VendorTagDescriptor;
 
@@ -82,9 +83,8 @@ public:
         const char* camera_id,
         int new_status);
     Mutex mCbLock;
-
-private:
     const int mDeviceIdBase;
+private:
     const Span<const device::implementation::hw::HwCameraFactory> mAvailableCameras;
     std::shared_ptr<ICameraProviderCallback> mCallback;
 
@@ -92,7 +92,7 @@ private:
     // Must be queried before using any APIs.
     // APIs will only work when this returns true
     bool mInitFailed;
-    const int kMaxCameraIdLen = 16;
+    static const int kMaxCameraIdLen = 16;
     int mNumberOfLegacyCameras;
     std::map<std::string, camera_device_status_t> mCameraStatusMap; // camera id -> status
     std::map<std::string, bool> mOpenLegacySupported; // camera id -> open_legacy HAL1.0 supported
@@ -101,33 +101,35 @@ private:
     SortedVector<std::pair<std::string, std::string>> mCameraDeviceNames;
 
     int mPreferredHal3MinorVersion;
+    void addDeviceNames(int camera_id, CameraDeviceStatus status = CameraDeviceStatus::PRESENT,
+                        bool cam_new = false);
+    void removeDeviceNames(int camera_id);
+    class HotplugThread : public SimpleThread {
+      public:
+        explicit HotplugThread(CameraProvider* parent);
+        ~HotplugThread() override;
 
-    //hidl_vec<VendorTagSection> mVendorTagSections;
-    //bool setUpVendorTags();
-    //int checkCameraVersion(int id, camera_info info);
+      protected:
+        bool threadLoop() override;
+      public:
+        int getMipiStatusFromFd();
+        void setMipiCameraId(int camera_id){
+          mMipiCameraId = camera_id;
+        }
+      private:
+        bool initialize();
+        void updateMipiHdmiStatusToProp(int value);
+        int subscribeEvent(int event);
 
-    // create HIDL device name from camera ID and legacy device version
-//     std::string getHidlDeviceName(std::string cameraId, int deviceVersion);
+        CameraProvider* mParent;
+        bool mIsInitialized = false;
+        int mFd = -1;
+        int mPipeFd[2] = {-1, -1};
+        int mMipiCameraId = -1;
+    };
 
-    // extract legacy camera ID/device version from a HIDL device name
-    //static std::string getLegacyCameraId(const hidl_string& deviceName);
+    std::shared_ptr<HotplugThread> mHotPlugThread;
 
-    // convert conventional HAL status to HIDL Status
-//     static AStatus getHidlStatus(int);
-
-//     // static callback forwarding methods
-//     static void sCameraDeviceStatusChange(
-//         const struct camera_module_callbacks* callbacks,
-//         int camera_id,
-//         int new_status);
-//     static void sTorchModeStatusChange(
-//         const struct camera_module_callbacks* callbacks,
-//         const char* camera_id,
-//         int new_status);
-
-//     void addDeviceNames(int camera_id, CameraDeviceStatus status = CameraDeviceStatus::PRESENT,
-//                         bool cam_new = false);
-//     void removeDeviceNames(int camera_id);
 };
 
 }  // namespace implementation

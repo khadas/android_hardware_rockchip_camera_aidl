@@ -827,10 +827,26 @@ int CameraDeviceSession::waitFlushingDone(const std::chrono::steady_clock::time_
         }
         return waitedForMs;
     } else {
-        LOG_ALWAYS_FATAL("%s:%s:%d: %zu buffers are still in "
-                         "flight after %dms of waiting, some buffers might have "
-                         "leaked", kClass, __func__, __LINE__, mNumBuffersInFlight,
+        ALOGE("%s:%s:%d: %zu buffers are still in "
+                         "flight after %dms of waiting, clear inflight requests buffers"
+                         , kClass, __func__, __LINE__, mNumBuffersInFlight,
                          kFatalDeadlineMs);
+        Mutex::Autolock _l(mInflightRequestLock);
+        for (auto && inflyightReq  : mInflightRequest)
+        {
+            HwCaptureRequest& req = mInflightRequest[inflyightReq.first];
+            for (size_t i = 0; i < req.buffers.size(); ++i) {
+                int32_t streamId = req.buffers[i]->getStreamId();
+                auto key = std::make_pair(streamId, inflyightReq.first);
+                Mutex::Autolock _lc(mInflightLock);
+                if (mInflightBuffers.count(key)) {
+                    mInflightBuffers.erase(key);
+                     mNumBuffersInFlight -= 1;
+                }
+            }
+        }
+        mInflightRequest.clear();
+        return 0;
     }
 }
 
