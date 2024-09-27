@@ -30,16 +30,3 @@ cc_library_shared {
         scs: true,
     },
 }
-
-ndk_library {
-    name: "libdata_bridge",
-    symbol_file: "libdata_bridge.map.txt",
-    first_version: "30",
-}
-prebuilt_etc {
-    name: "public.libraries.libdata_bridge.txt",
-    src: "public.libraries.txt",
-    filename: "public.libraries.txt",
-    installable: false,
-}
-
