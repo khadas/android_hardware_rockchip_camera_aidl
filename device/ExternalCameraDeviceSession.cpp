@@ -983,6 +983,8 @@ Status ExternalCameraDeviceSession::processOneCaptureRequest(const CaptureReques
         }
 
         if (requestFpsMax != mV4l2StreamingFps) {
+            ALOGW("%s: requestFpsMax(%f) != mV4l2StreamingFps(%f) reconfig stream! mNumDequeuedV4l2Buffers(%zu), frameNumber(%d)",
+                  __FUNCTION__, requestFpsMax, mV4l2StreamingFps, mNumDequeuedV4l2Buffers, request.frameNumber);
             {
                 std::unique_lock<std::mutex> lk(mV4l2BufferLock);
                 while (mNumDequeuedV4l2Buffers != 0) {
@@ -993,6 +995,27 @@ Status ExternalCameraDeviceSession::processOneCaptureRequest(const CaptureReques
                         return Status::INTERNAL_ERROR;
                     }
                 }
+            }
+
+            if (mLastFinishedFrame >=0 ) {
+                std::unique_lock<std::mutex> lock(mLastFinishedFrameLock);
+                int waitTimes = 0;
+
+                while (mLastFinishedFrame < (request.frameNumber-1)) {
+                    auto timeout = std::chrono::milliseconds(kReqWaitTimeoutMs);
+                    auto st = mRequestDoneCond.wait_for(lock, timeout);
+                    if (st == std::cv_status::timeout) {
+                        ALOGE("%s: wait for inflight request finish timeout!", __FUNCTION__);
+                        waitTimes++;
+                        if (waitTimes == kReqWaitTimesWarn) {
+                            // BufferRequestThread just wait forever for new buffer request
+                            // But it will print some periodic warning indicating it's waiting
+                            ALOGE("%s: waiting kReqWaitTimesWarn(%d) times", __FUNCTION__, kReqWaitTimesWarn);
+                            break;
+                        }
+                    }
+                }
+                ALOGD("%s: flushing inflight requests", __FUNCTION__);
             }
             configureV4l2StreamLocked(mV4l2StreamingFmt, requestFpsMax);
         }
@@ -1410,18 +1433,20 @@ status_t ExternalCameraDeviceSession::fillCaptureResult(common::V1_0::helper::Ca
 int ExternalCameraDeviceSession::configureV4l2StreamLocked(SupportedV4L2Format& v4l2Fmt,
                                                            double requestFps) {
     ATRACE_CALL();
+
+    ALOGD("%s: V4L configuration format:%c%c%c%c, w %d, h %d",
+         __FUNCTION__,
+         v4l2Fmt.fourcc & 0xFF,
+         (v4l2Fmt.fourcc >> 8) & 0xFF,
+         (v4l2Fmt.fourcc >> 16) & 0xFF,
+         (v4l2Fmt.fourcc >> 24) & 0xFF,
+         v4l2Fmt.width, v4l2Fmt.height);
+
     int ret = v4l2StreamOffLocked();
     if (ret != OK) {
         ALOGE("%s: stop v4l2 streaming failed: ret %d", __FUNCTION__, ret);
         return ret;
     }
-
-    ALOGD("V4L configuration format:%c%c%c%c, w %d, h %d",
-        v4l2Fmt.fourcc & 0xFF,
-        (v4l2Fmt.fourcc >> 8) & 0xFF,
-        (v4l2Fmt.fourcc >> 16) & 0xFF,
-        (v4l2Fmt.fourcc >> 24) & 0xFF,
-        v4l2Fmt.width, v4l2Fmt.height);
 
     // VIDIOC_S_FMT w/h/fmt
     v4l2_format fmt;
@@ -2006,6 +2031,7 @@ int ExternalCameraDeviceSession::v4l2StreamOffLocked() {
         ALOGE("%s: STREAMOFF failed: %s", __FUNCTION__, strerror(errno));
         return -errno;
     }
+    ALOGV("@%s: STREAMOFF success!", __FUNCTION__);
 
     for (int i = 0; i < mV4L2BufferCount; i++) {
         ALOGD("close mBufFd[%d]=%d", i, mBufFd[i]);
@@ -2409,6 +2435,15 @@ Status ExternalCameraDeviceSession::processCaptureResult(std::shared_ptr<HalRequ
         mInflightFrames.erase(req->frameNumber);
     }
 
+    ALOGD("@%s  req->frameNumber(%d)", __FUNCTION__, req->frameNumber);
+    // update finished frame records
+    {
+        std::unique_lock<std::mutex> lk(mLastFinishedFrameLock);
+        mLastFinishedFrame = req->frameNumber;
+        lk.unlock();
+        mRequestDoneCond.notify_one();
+    }
+
     // Callback into framework
     invokeProcessCaptureResultCallback(results, /* tryWriteFmq */ true);
     freeReleaseFences(results);
@@ -2765,6 +2800,7 @@ bool ExternalCameraDeviceSession::FrameWorkerThread::threadLoop() {
         return true;
     }
 
+    ALOGV("FrameWorkerThread:%s req->framenumber(%d)", __FUNCTION__, req->frameNumber);
 REDEQUE:
     nsecs_t shutterTs = 0;
     std::shared_ptr<V4L2Frame> frameIn = parent->dequeueV4l2FrameLocked(&shutterTs);

@@ -470,6 +470,12 @@ class ExternalCameraDeviceSession : public BnCameraDeviceSession, public OutputT
     std::mutex mInflightFramesLock;  // protect mInflightFrames
     std::unordered_set<uint32_t> mInflightFrames;
 
+    std::mutex mLastFinishedFrameLock;  // protect mLastestFrameLock
+    int mLastFinishedFrame = -1;
+    std::condition_variable mRequestDoneCond;  // signaled when a request is done
+    static const int kReqWaitTimeoutMs = 66; //66ms
+    static const int kReqWaitTimesWarn = 45;   // 66ms * 45 ~= 3 sec
+
     // Stream ID -> circulating buffers map
     std::map<int, CirculatingBuffers> mCirculatingBuffers;
     // Protect mCirculatingBuffers, must not lock mLock after acquiring this lock
