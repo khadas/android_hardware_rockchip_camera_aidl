@@ -323,13 +323,16 @@ sp<GraphicBuffer> GraphicBuffer_Init(int width, int height,int format) {
 
 ExternalCameraDeviceSession::ExternalCameraDeviceSession(
         const std::shared_ptr<ICameraDeviceCallback>& callback, const ExternalCameraConfig& cfg,
-        const std::vector<SupportedV4L2Format>& sortedFormats, const CroppingType& croppingType,
+        const std::vector<SupportedV4L2Format>& sortedFormats,
+        const std::vector<SupportedV4L2Format>& sortedAddFormats,
+        const CroppingType& croppingType,
         const common::V1_0::helper::CameraMetadata& chars, const std::string& cameraId,
         unique_fd v4l2Fd)
     : mCallback(callback),
       mCfg(cfg),
       mCameraCharacteristics(chars),
       mSupportedFormats(sortedFormats),
+      mSupportedAddFormats(sortedAddFormats),
       mCroppingType(croppingType),
       mCameraId(cameraId),
       mV4l2Fd(std::move(v4l2Fd)),
@@ -555,6 +558,13 @@ ScopedAStatus ExternalCameraDeviceSession::constructDefaultRequestSettings(
     return fromStatus(status);
 }
 
+bool isAspectRatioClose2(float ar1, float ar2) {
+    const float kAspectRatioMatchThres = 0.1f; // This threshold is good enough to distinguish
+                                                // 4:3/16:9/20:9
+                                                // 1.33 / 1.78 / 2
+    return (std::abs(ar1 - ar2) < kAspectRatioMatchThres);
+}
+
 ScopedAStatus ExternalCameraDeviceSession::configureStreams(
         const StreamConfiguration& in_requestedConfiguration,
         std::vector<HalStream>* _aidl_return) {
@@ -563,7 +573,7 @@ ScopedAStatus ExternalCameraDeviceSession::configureStreams(
     Mutex::Autolock _il(mInterfaceLock);
 
     Status status =
-            isStreamCombinationSupported(in_requestedConfiguration, mSupportedFormats, mCfg);
+            isStreamCombinationSupported(in_requestedConfiguration, mSupportedAddFormats, mCfg);
     if (status != Status::OK) {
         return fromStatus(status);
     }
@@ -697,6 +707,8 @@ ScopedAStatus ExternalCameraDeviceSession::configureStreams(
     }
     if (v4l2Fmt.width == 0) {
         // Cannot find exact good aspect ratio candidate, try to find a close one
+        ALOGW("%s: unable to find a resolution matching (%s at least %d, aspect ratio %f), try to find a close one",
+              __FUNCTION__, (mCroppingType == VERTICAL) ? "width" : "height", maxDim, desiredAr);
         int offset = INT_MAX;
         for (const auto& fmt : mSupportedFormats) {
             uint32_t dim = (mCroppingType == VERTICAL) ? fmt.width : fmt.height;
@@ -709,12 +721,20 @@ ScopedAStatus ExternalCameraDeviceSession::configureStreams(
             }
         }
     }
-
     if (v4l2Fmt.width == 0) {
         ALOGE("%s: unable to find a resolution matching (%s at least %d, aspect ratio %f)",
               __FUNCTION__, (mCroppingType == VERTICAL) ? "width" : "height", maxDim, desiredAr);
         return fromStatus(Status::ILLEGAL_ARGUMENT);
     }
+
+    float aspectRatio = ASPECT_RATIO(v4l2Fmt);
+    if (aspectRatio < desiredAr)
+        mCroppingType = VERTICAL;
+    else
+        mCroppingType = HORIZONTAL;
+    ALOGD("%s: modified mCroppingType(%s)", __FUNCTION__,
+         (mCroppingType == VERTICAL) ? "VERTICAL" : "HORIZONTAL");
+    mOutputThread->setCroppingType(mCroppingType);
 
     if (configureV4l2StreamLocked(v4l2Fmt) != 0) {
         ALOGE("V4L configuration failed!, format:%c%c%c%c, w %d, h %d", v4l2Fmt.fourcc & 0xFF,
@@ -3778,6 +3798,11 @@ void ExternalCameraDeviceSession::OutputThread::signalRequestDone() {
     mProcessingFrameNumber = 0;
     lk.unlock();
     mRequestDoneCond.notify_one();
+}
+
+void ExternalCameraDeviceSession::OutputThread::setCroppingType(
+        CroppingType newCroppingType) {
+    mCroppingType = newCroppingType;
 }
 
 int ExternalCameraDeviceSession::OutputThread::cropAndScaleLocked(

@@ -155,7 +155,7 @@ ndk::ScopedAStatus ExternalCameraDevice::isStreamCombinationSupported(
         return fromStatus(Status::INTERNAL_ERROR);
     }
     Status s = ExternalCameraDeviceSession::isStreamCombinationSupported(in_streams,
-                                                                         mSupportedFormats, mCfg);
+                                                                         mSupportedAddFormats, mCfg);
     *_aidl_return = s == Status::OK;
     return fromStatus(Status::OK);
 }
@@ -201,7 +201,7 @@ ndk::ScopedAStatus ExternalCameraDevice::open(
         return fromStatus(Status::INTERNAL_ERROR);
     }
 
-    session = createSession(in_callback, mCfg, mSupportedFormats, mCroppingType,
+    session = createSession(in_callback, mCfg, mSupportedFormats, mSupportedAddFormats, mCroppingType,
                             mCameraCharacteristics, mCameraId, std::move(fd));
     if (session == nullptr) {
         ALOGE("%s: camera device session allocation failed", __FUNCTION__);
@@ -237,11 +237,13 @@ ndk::ScopedAStatus ExternalCameraDevice::getTorchStrengthLevel(int32_t*) {
 
 std::shared_ptr<ExternalCameraDeviceSession> ExternalCameraDevice::createSession(
         const std::shared_ptr<ICameraDeviceCallback>& cb, const ExternalCameraConfig& cfg,
-        const std::vector<SupportedV4L2Format>& sortedFormats, const CroppingType& croppingType,
+        const std::vector<SupportedV4L2Format>& sortedFormats,
+        const std::vector<SupportedV4L2Format>& sortedAddFormats,
+        const CroppingType& croppingType,
         const common::V1_0::helper::CameraMetadata& chars, const std::string& cameraId,
         unique_fd v4l2Fd) {
     return ndk::SharedRefBase::make<ExternalCameraDeviceSession>(
-            cb, cfg, sortedFormats, croppingType, chars, cameraId, std::move(v4l2Fd));
+            cb, cfg, sortedFormats, sortedAddFormats, croppingType, chars, cameraId, std::move(v4l2Fd));
 }
 
 bool ExternalCameraDevice::isInitFailed() {
@@ -926,7 +928,7 @@ status_t ExternalCameraDevice::initOutputCharsKeysByFormat(
         }
     }
     trimSupportedFormats(mCroppingType, &supportedFormatsAdd);
-    mSupportedFormats = supportedFormatsAdd;
+    mSupportedAddFormats = supportedFormatsAdd;
 
     std::vector<int32_t> streamConfigurations;
     std::vector<int64_t> minFrameDurations;

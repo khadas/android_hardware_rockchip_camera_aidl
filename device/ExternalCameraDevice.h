@@ -73,7 +73,9 @@ class ExternalCameraDevice : public BnCameraDevice {
   private:
     virtual std::shared_ptr<ExternalCameraDeviceSession> createSession(
             const std::shared_ptr<ICameraDeviceCallback>&, const ExternalCameraConfig& cfg,
-            const std::vector<SupportedV4L2Format>& sortedFormats, const CroppingType& croppingType,
+            const std::vector<SupportedV4L2Format>& sortedFormats,
+            const std::vector<SupportedV4L2Format>& sortedAddFormats,
+            const CroppingType& croppingType,
             const common::V1_0::helper::CameraMetadata& chars, const std::string& cameraId,
             unique_fd v4l2Fd);
 
@@ -130,7 +132,10 @@ class ExternalCameraDevice : public BnCameraDevice {
     std::string mCameraId;
     std::string mDevicePath;
     const ExternalCameraConfig& mCfg;
+    // actual supported formats
     std::vector<SupportedV4L2Format> mSupportedFormats;
+    // supported + artificial added formats
+    std::vector<SupportedV4L2Format> mSupportedAddFormats;
     CroppingType mCroppingType;
 
     std::weak_ptr<ExternalCameraDeviceSession> mSession =

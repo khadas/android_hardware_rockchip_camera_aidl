@@ -75,6 +75,7 @@ class ExternalCameraDeviceSession : public BnCameraDeviceSession, public OutputT
     ExternalCameraDeviceSession(const std::shared_ptr<ICameraDeviceCallback>&,
                                 const ExternalCameraConfig& cfg,
                                 const std::vector<SupportedV4L2Format>& sortedFormats,
+                                const std::vector<SupportedV4L2Format>& sortedAddFormats,
                                 const CroppingType& croppingType,
                                 const common::V1_0::helper::CameraMetadata& chars,
                                 const std::string& cameraId, unique_fd v4l2Fd);
@@ -189,6 +190,7 @@ class ExternalCameraDeviceSession : public BnCameraDeviceSession, public OutputT
                 mCameraId = cameraId;
         }
         void setExifMakeModel(const std::string& make, const std::string& model);
+        void setCroppingType(CroppingType type);
 
         // The remaining request list is returned for offline processing
         std::list<std::shared_ptr<HalRequest>> switchToOffline();
@@ -219,7 +221,7 @@ class ExternalCameraDeviceSession : public BnCameraDeviceSession, public OutputT
         void clearIntermediateBuffers();
 
         const std::weak_ptr<OutputThreadInterface> mParent;
-        const CroppingType mCroppingType;
+        CroppingType mCroppingType;
         const common::V1_0::helper::CameraMetadata mCameraCharacteristics;
 
         mutable std::mutex mRequestListLock;       // Protect access to mRequestList,
@@ -425,8 +427,11 @@ class ExternalCameraDeviceSession : public BnCameraDeviceSession, public OutputT
     const std::shared_ptr<ICameraDeviceCallback> mCallback;
     const ExternalCameraConfig& mCfg;
     const common::V1_0::helper::CameraMetadata mCameraCharacteristics;
+    // actual supported formats
     const std::vector<SupportedV4L2Format> mSupportedFormats;
-    const CroppingType mCroppingType;
+    // supported + artificial added formats
+    const std::vector<SupportedV4L2Format> mSupportedAddFormats;
+    CroppingType mCroppingType;
     const std::string mCameraId;
 
     // Not protected by mLock, this is almost a const.
