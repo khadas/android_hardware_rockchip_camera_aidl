@@ -736,6 +736,12 @@ ScopedAStatus ExternalCameraDeviceSession::configureStreams(
          (mCroppingType == VERTICAL) ? "VERTICAL" : "HORIZONTAL");
     mOutputThread->setCroppingType(mCroppingType);
 
+    if (v4l2Fmt.fourcc == V4L2_PIX_FMT_H264) {
+        mFormatConvertThread->destroyH264Decoder();
+        mFormatConvertThread->createH264Decoder(v4l2Fmt.width, v4l2Fmt.height);
+        isNeedCheckIFrame = true;
+    }
+
     if (configureV4l2StreamLocked(v4l2Fmt) != 0) {
         ALOGE("V4L configuration failed!, format:%c%c%c%c, w %d, h %d", v4l2Fmt.fourcc & 0xFF,
               (v4l2Fmt.fourcc >> 8) & 0xFF, (v4l2Fmt.fourcc >> 16) & 0xFF,
@@ -1646,7 +1652,12 @@ int ExternalCameraDeviceSession::configureV4l2StreamLocked(SupportedV4L2Format& 
     }
 
     // Swallow first few frames after streamOn to account for bad frames from some devices
-    for (int i = 0; i < kBadFramesAfterStreamOn; i++) {
+    int skipFrameAfterStreamOn = kBadFramesAfterStreamOn;
+    if (v4l2Fmt.fourcc == V4L2_PIX_FMT_H264) {
+        skipFrameAfterStreamOn = 0;
+        ALOGW("%s: H264 can't skip frame, for need I frame to do decode!", __FUNCTION__);
+    }
+    for (int i = 0; i < skipFrameAfterStreamOn; i++) {
         v4l2_buffer buffer{};
 
         if (mCapability.device_caps & V4L2_CAP_VIDEO_CAPTURE_MPLANE)
@@ -1683,11 +1694,6 @@ int ExternalCameraDeviceSession::configureV4l2StreamLocked(SupportedV4L2Format& 
             ALOGE("%s: QBUF index %d fails: %s", __FUNCTION__, buffer.index, strerror(errno));
             return -errno;
         }
-    }
-    if (v4l2Fmt.fourcc == V4L2_PIX_FMT_H264) {
-        mFormatConvertThread->destroyH264Decoder();
-        mFormatConvertThread->createH264Decoder(v4l2Fmt.width, v4l2Fmt.height);
-        isNeedCheckIFrame = true;
     }
 
     ALOGI("%s: start V4L2 streaming %dx%d@%ffps", __FUNCTION__, v4l2Fmt.width, v4l2Fmt.height, fps);
@@ -2842,10 +2848,10 @@ REDEQUE:
         if (frameIn->getData(&inData, &inDataSize) != 0) {
             ALOGE("%s(%d)getData failed!\n", __FUNCTION__, __LINE__);
         }
-#ifdef DUMP_YUV
+#ifdef DUMP_H264
         {
-            //int frameCount = req->frameNumber;
-            //if(frameCount > 5 && frameCount<10){
+            int frameCount = req->frameNumber;
+            if(frameCount > 0 && frameCount < 100){
                 FILE* fp =NULL;
                 char filename[128];
                 filename[0] = 0x00;
@@ -2859,7 +2865,7 @@ REDEQUE:
                 } else {
                     ALOGE("Create %s failed(%d, %s)",filename,fp, strerror(errno));
                 }
-            //}
+            }
         }
 #endif
         isIFrame = checkH264FrameType(inData, inDataSize, &inputOffset);
@@ -2987,6 +2993,11 @@ void ExternalCameraDeviceSession::FormatConvertThread::createH264Decoder(int wid
     if (ret) {
         ALOGE("%p mpp_init failed\n", mMppCtx);
     }
+
+    uint32_t fastOut = 1;
+    mMppApi->control(mMppCtx, MPP_DEC_SET_IMMEDIATE_OUT, &fastOut);
+    ALOGD("enable lowLatency, enable mpp fast-out mode");
+
     mpp_dec_cfg_init(&mMppDecCfg);
     /* get default config from decoder context */
     ret = mMppApi->control(mMppCtx, MPP_DEC_GET_CFG, mMppDecCfg);
@@ -3371,16 +3382,18 @@ bool ExternalCameraDeviceSession::FormatConvertThread::threadLoop() {
             ALOGE("C2_NOT_FOUND");
         }
         if (req->MppFrame) {
+            RK_U32 width = mpp_frame_get_width(req->MppFrame);
+            RK_U32 height = mpp_frame_get_height(req->MppFrame);
+            RK_U32 hstride = mpp_frame_get_hor_stride(req->MppFrame);
+            RK_U32 vstride = mpp_frame_get_ver_stride(req->MppFrame);
+            RK_U32 buf_size = mpp_frame_get_buf_size(req->MppFrame);
+            MppFrameFormat format = mpp_frame_get_fmt(req->MppFrame);
+
             if (mpp_frame_get_info_change(req->MppFrame)) {
-                RK_U32 width = mpp_frame_get_width(req->MppFrame);
-                RK_U32 height = mpp_frame_get_height(req->MppFrame);
-                RK_U32 hor_stride = mpp_frame_get_hor_stride(req->MppFrame);
-                RK_U32 ver_stride = mpp_frame_get_ver_stride(req->MppFrame);
-                RK_U32 buf_size = mpp_frame_get_buf_size(req->MppFrame);
 
                 ALOGD("%p decode_get_frame get info changed found\n", mMppCtx);
                 ALOGD("%p decoder require buffer w:h [%d:%d] stride [%d:%d] buf_size %d",
-                            mMppCtx, width, height, hor_stride, ver_stride, buf_size);
+                            mMppCtx, width, height, hstride, vstride, buf_size);
 
                 if (NULL == mMppBufferGroup) {
                     /* If buffer group is not set create one and limit it */
@@ -3415,25 +3428,70 @@ bool ExternalCameraDeviceSession::FormatConvertThread::threadLoop() {
                 if (ret) {
                     ALOGE("%p info change ready failed ret %d\n", mMppCtx, ret);
                 }
-
-
+                uint8_t* vir_addr = reinterpret_cast<uint8_t*>(req->mVirAddr);
+                memset(vir_addr, 0, width*height);
+                memset((vir_addr) + width*height, 128, (width*height) >> 1);
             }else{
-                uint32_t width  = mpp_frame_get_width(req->MppFrame);
-                uint32_t height = mpp_frame_get_height(req->MppFrame);
-                uint32_t hstride = mpp_frame_get_hor_stride(req->MppFrame);
-                uint32_t vstride = mpp_frame_get_ver_stride(req->MppFrame);
-                MppFrameFormat format = mpp_frame_get_fmt(req->MppFrame);
-
                 uint32_t err = mpp_frame_get_errinfo(req->MppFrame);
                 uint32_t eos = mpp_frame_get_eos(req->MppFrame);
                 MppBuffer mppBuffer = mpp_frame_get_buffer(req->MppFrame);
                 int pts = mpp_frame_get_pts(req->MppFrame);
+                mpp_buffer_inc_ref(mppBuffer);
 
                 LOGD("get one frame [%d:%d] stride [%d:%d] pts %lld err %d eos %d",
                         width, height, hstride, vstride, pts, err, eos);
 
-                req->mShareFd = mpp_buffer_get_fd(mppBuffer);
-                req->mVirAddr = (unsigned long)mpp_buffer_get_ptr(mppBuffer);
+                camera2::RgaCropScale::Params rgaIn, rgaOut;
+
+                rgaIn.fd = (unsigned long)mpp_buffer_get_fd(mppBuffer);;
+                rgaIn.fmt = HAL_PIXEL_FORMAT_YCrCb_NV12;
+                rgaIn.vir_addr = reinterpret_cast<char*>(mpp_buffer_get_ptr(mppBuffer));
+                rgaIn.mirror = false;
+                rgaIn.width = width;
+                rgaIn.height = height;
+                rgaIn.offset_x = 0;
+                rgaIn.offset_y = 0;
+                rgaIn.width_stride = hstride;
+                rgaIn.height_stride = vstride;
+
+                rgaOut.fd = req->mShareFd;
+                rgaOut.fmt = HAL_PIXEL_FORMAT_YCrCb_NV12;
+                rgaOut.vir_addr = reinterpret_cast<char*>(req->mVirAddr);
+                rgaOut.mirror = false;
+                rgaOut.width = width;
+                rgaOut.height = height;
+                rgaOut.offset_x = 0;
+                rgaOut.offset_y = 0;
+                rgaOut.width_stride = width;
+                rgaOut.height_stride = height;
+                if (camera2::RgaCropScale::CropScaleNV12Or21(&rgaIn, &rgaOut)) {
+                    ALOGE("%s: h264 decode out data by RGA failed\n", __FUNCTION__);
+                }
+
+                //req->mShareFd = mpp_buffer_get_fd(mppBuffer);
+                //req->mVirAddr = (unsigned long)mpp_buffer_get_ptr(mppBuffer);
+                mpp_buffer_put(mppBuffer);
+
+#ifdef DUMP_H264
+                {
+                    int frameCount = req->frameNumber;
+                    if(frameCount > 0 && frameCount<10) {
+                        FILE* fp =NULL;
+                        char filename[128];
+                        filename[0] = 0x00;
+                        sprintf(filename, "/data/camera/camera_dump_h264dec_out_%dx%d_%d.yuv",
+                                hstride, vstride, frameCount);
+                        fp = fopen(filename, "wb+");
+                        if (fp != NULL) {
+                            fwrite((char*)rgaIn.vir_addr,1,width*height*1.5,fp);
+                            fclose(fp);
+                            ALOGI("Write success YUV data to %s",filename);
+                        } else {
+                            ALOGE("Create %s failed(%d, %s)",filename,fp, strerror(errno));
+                        }
+                    }
+                }
+#endif
             }
             mpp_frame_deinit(&req->MppFrame);
         }
