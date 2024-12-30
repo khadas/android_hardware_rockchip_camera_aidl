@@ -558,7 +558,7 @@ status_t ExternalCameraDevice::initDefaultCharsKeys(
     UPDATE(ANDROID_SCALER_CROPPING_TYPE, &croppingType, 1);
 
     const int32_t testPatternModes[] = {ANDROID_SENSOR_TEST_PATTERN_MODE_OFF,
-                                        ANDROID_SENSOR_TEST_PATTERN_MODE_SOLID_COLOR};
+                                        ANDROID_SENSOR_TEST_PATTERN_MODE_COLOR_BARS};
     UPDATE(ANDROID_SENSOR_AVAILABLE_TEST_PATTERN_MODES, testPatternModes,
            ARRAY_SIZE(testPatternModes));
 
