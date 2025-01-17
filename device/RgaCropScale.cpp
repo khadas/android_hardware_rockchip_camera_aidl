@@ -426,7 +426,7 @@ END:
     return ret;
 }
 
-static void empty_structure(rga_buffer_t *src, rga_buffer_t *dst, rga_buffer_t *pat,
+static void cameraaidl_empty_structure(rga_buffer_t *src, rga_buffer_t *dst, rga_buffer_t *pat,
                                 im_rect *srect, im_rect *drect, im_rect *prect, im_opt_t *opt) {
     if (src != NULL)
         memset(src, 0, sizeof(*src));
@@ -499,7 +499,7 @@ int RgaCropScale::Im2dBlit(struct Params* in, struct Params* out)
 	im_rect drect;
 	im_rect prect;
 	int usage = 0;
-	empty_structure(NULL, NULL, &pat, &srect, &drect, &prect, &opt);
+	cameraaidl_empty_structure(NULL, NULL, &pat, &srect, &drect, &prect, &opt);
 
 	usage |= IM_SYNC;
 	if (in->blend > 0 && (in->translate_x > 0 || in->translate_y  > 0)) {
