@@ -79,6 +79,13 @@ struct SizeHasher {
     }
 };
 
+struct IdMap {
+    std::string id;
+    std::string card;
+    std::string bus_info;
+    std::string dev;
+};
+
 struct ExternalCameraConfig {
     static const char* kDefaultCfgPath;
     static ExternalCameraConfig loadFromCfg(const char* cfgPath = kDefaultCfgPath);
@@ -88,7 +95,7 @@ struct ExternalCameraConfig {
 
     // List of internal V4L2 video nodes external camera HAL must ignore.
     std::unordered_set<std::string> mInternalDevices;
-
+    std::unordered_set<std::shared_ptr<IdMap>> mIdMaps;
     // Maximal size of a JPEG buffer, in bytes
     int32_t maxJpegBufSize;
 

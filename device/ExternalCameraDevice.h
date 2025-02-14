@@ -43,7 +43,7 @@ class ExternalCameraDevice : public BnCameraDevice {
     // be multiple CameraDevice trying to access the same physical camera.  Also, provider will have
     // to keep track of all CameraDevice objects in order to notify CameraDevice when the underlying
     // camera is detached.
-    ExternalCameraDevice(const std::string& devicePath, const ExternalCameraConfig& config);
+    ExternalCameraDevice(const std::string& devicePath, const ExternalCameraConfig& config,std::string cameraId = "");
     ~ExternalCameraDevice() override;
 
     ndk::ScopedAStatus getCameraCharacteristics(CameraMetadata* _aidl_return) override;

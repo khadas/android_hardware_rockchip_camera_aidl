@@ -51,7 +51,7 @@ const char* ExternalCameraConfig::kDefaultCfgPath = "/vendor/etc/external_camera
 ExternalCameraConfig ExternalCameraConfig::loadFromCfg(const char* cfgPath) {
     using namespace tinyxml2;
     ExternalCameraConfig ret;
-
+    ALOGD("%s %s",__FUNCTION__,cfgPath);
     XMLDocument configXml;
     XMLError err = configXml.LoadFile(cfgPath);
     if (err != XML_SUCCESS) {
@@ -93,6 +93,64 @@ ExternalCameraConfig ExternalCameraConfig::loadFromCfg(const char* cfgPath) {
             ALOGI("%s: device %s will be ignored by external camera provider", __FUNCTION__, text);
         }
         id = id->NextSiblingElement("id");
+    }
+    XMLElement* idmap = providerCfg->FirstChildElement("idmap");
+    if (idmap != nullptr) {
+        XMLElement* id = idmap->FirstChildElement("id");
+        while (id != nullptr) {
+            const char* text = id->GetText();
+            auto idmap = std::make_unique<IdMap>();
+            if (text != nullptr) {
+                // Check if ID is a valid number string
+                bool isValid = true;
+                for (const char* p = text; *p != '\0'; p++) {
+                    if (!isdigit(*p)) {
+                        isValid = false;
+                        break;
+                    }
+                }
+                if (!isValid) {
+                    ALOGW("%s: Invalid camera ID '%s' in config (must be numeric), skipping", 
+                          __FUNCTION__, text);
+                    id = id->NextSiblingElement("id");
+                    continue;
+                }
+                idmap->id = text;
+                ALOGI("%s: id: '%s'", __FUNCTION__, !idmap->id.empty() ? idmap->id.c_str() : "(empty)");
+            }
+            const char* card = nullptr;
+            if(id->QueryStringAttribute("card", &card) == tinyxml2::XML_SUCCESS){
+                idmap->card = card;
+                ALOGI("%s: card: '%s'", __FUNCTION__, !idmap->card.empty() ? idmap->card.c_str() : "(empty)");
+            }
+            const char* bus_info = nullptr;
+            if(id->QueryStringAttribute("bus_info", &bus_info) == tinyxml2::XML_SUCCESS){
+                idmap->bus_info = bus_info;
+                ALOGI("%s: bus_info: '%s'", __FUNCTION__, !idmap->bus_info.empty() ? idmap->bus_info.c_str() : "(empty)");
+            }
+            const char* dev = nullptr;
+            if(id->QueryStringAttribute("dev", &dev) == tinyxml2::XML_SUCCESS){
+                idmap->dev = dev;
+                ALOGI("%s: dev: '%s'", __FUNCTION__, !idmap->dev.empty() ? idmap->dev.c_str() : "(empty)");
+            }
+            ret.mIdMaps.insert(std::move(idmap));
+            id = id->NextSiblingElement("id");
+        }
+    }
+
+    // After processing idmap node
+    if (!ret.mIdMaps.empty()) {
+        ALOGI("%s: Dumping all IdMaps:", __FUNCTION__);
+        for (const auto& idMap : ret.mIdMaps) {
+            ALOGI("  IdMap {");
+            ALOGI("    id: %s", !idMap->id.empty() ? idMap->id.c_str() : "null");
+            ALOGI("    card: %s", !idMap->card.empty() ? idMap->card.c_str() : "null");
+            ALOGI("    bus_info: %s", !idMap->bus_info.empty() ? idMap->bus_info.c_str() : "null");
+            ALOGI("    dev: %s", !idMap->dev.empty() ? idMap->dev.c_str() : "null");
+            ALOGI("  }");
+        }
+    } else {
+        ALOGI("%s: No IdMaps configured", __FUNCTION__);
     }
 
     XMLElement* deviceCfg = extCam->FirstChildElement("Device");

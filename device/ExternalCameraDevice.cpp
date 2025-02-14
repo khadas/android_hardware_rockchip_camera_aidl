@@ -81,13 +81,37 @@ const std::regex kDevicePathRE("/dev/video([0-9]+)");
 std::string ExternalCameraDevice::kDeviceVersion = "1.1";
 
 ExternalCameraDevice::ExternalCameraDevice(const std::string& devicePath,
-                                           const ExternalCameraConfig& config)
-    : mCameraId("-1"), mDevicePath(devicePath), mCfg(config) {
-    std::smatch sm;
-    if (std::regex_match(mDevicePath, sm, kDevicePathRE)) {
-        mCameraId = std::to_string(mCfg.cameraIdOffset + std::stoi(sm[1]));
+                                           const ExternalCameraConfig& config,std::string cameraId)
+    : mCameraId(""), mDevicePath(devicePath), mCfg(config) {
+
+    // Validate camera ID
+    bool isValidId = true;
+    if (cameraId.empty()) {
+        isValidId = false;
     } else {
-        ALOGE("%s: device path match failed for %s", __FUNCTION__, mDevicePath.c_str());
+        for (char c : cameraId) {
+            if (!isdigit(c)) {
+                isValidId = false;
+                break;
+            }
+        }
+    }
+
+    if (!isValidId) {
+        ALOGW("%s: Invalid camera ID '%s', falling back to default ID",
+              __FUNCTION__, cameraId.c_str());
+        // Calculate default ID based on device path
+        const char* devName = devicePath.c_str();
+        const char* lastSlash = strrchr(devName, '/');
+        if (lastSlash != nullptr) {
+            devName = lastSlash + 1;
+        }
+        if (strncmp("video", devName, 5) == 0) {
+            devName += 5;  // Skip "video" prefix
+        }
+        mCameraId = std::to_string(mCfg.cameraIdOffset + atoi(devName));
+    } else {
+        mCameraId = cameraId;
     }
 }
 
@@ -482,7 +506,16 @@ status_t ExternalCameraDevice::initDefaultCharsKeys(
     const uint8_t opticalStabilizationMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
     UPDATE(ANDROID_LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION, &opticalStabilizationMode, 1);
 
-    const uint8_t facing = ANDROID_LENS_FACING_EXTERNAL;
+    uint8_t facing = ANDROID_LENS_FACING_EXTERNAL;
+    if (mCameraId == "0")
+    {
+       facing = ANDROID_LENS_FACING_BACK;
+    }else if (mCameraId == "1"){
+       facing = ANDROID_LENS_FACING_FRONT;
+    }else{
+       facing = ANDROID_LENS_FACING_EXTERNAL;
+    }
+
     UPDATE(ANDROID_LENS_FACING, &facing, 1);
 
     // android.noiseReduction

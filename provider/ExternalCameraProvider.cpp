@@ -20,6 +20,7 @@
 #include "ExternalCameraProvider.h"
 
 #include <ExternalCameraDevice.h>
+#include <ExternalCameraUtils.h>
 #include <aidl/android/hardware/camera/common/Status.h>
 #include <convert.h>
 #include <cutils/properties.h>
@@ -38,6 +39,7 @@ using ::aidl::android::hardware::camera::common::Status;
 using ::android::hardware::camera::device::implementation::ExternalCameraDevice;
 using ::android::hardware::camera::device::implementation::fromStatus;
 using ::android::hardware::camera::external::common::ExternalCameraConfig;
+using ::android::hardware::camera::external::common::IdMap;
 
 namespace {
 // "device@<version>/external/<id>"
@@ -48,16 +50,26 @@ constexpr char kPrefix[] = "video";
 constexpr int kPrefixLen = sizeof(kPrefix) - 1;
 constexpr int kDevicePrefixLen = sizeof(kDevicePath) + kPrefixLen - 1;
 static int cameraCount = 0;
+int32_t deviceIdBase;
 
-bool matchDeviceName(int cameraIdOffset, const std::string& deviceName, std::string* deviceVersion,
-                     std::string* cameraDevicePath) {
+std::unordered_map<std::string, std::string> mCameraIdMap;
+std::string getCameraIdByDevicePath(std::string devname, std::unordered_map<std::string, std::string> map) {
+    for (auto it= map.begin(); it != map.end(); ++it) {
+        std::string name = it->second;
+        if (name == devname)
+            return it->first;
+    }
+    return "-1";
+}
+bool matchDeviceId(const std::string& deviceName, std::string* deviceVersion,
+                     std::string* deviceId) {
     std::smatch sm;
     if (std::regex_match(deviceName, sm, kDeviceNameRE)) {
         if (deviceVersion != nullptr) {
             *deviceVersion = sm[1];
         }
-        if (cameraDevicePath != nullptr) {
-            *cameraDevicePath = "/dev/video" + std::to_string(std::stoi(sm[2]) - cameraIdOffset);
+        if (deviceId != nullptr) {
+            *deviceId = std::to_string(std::stoi(sm[2]));
         }
         return true;
     }
@@ -69,6 +81,8 @@ ExternalCameraProvider::ExternalCameraProvider() : mCfg(ExternalCameraConfig::lo
     mHotPlugThread = std::make_shared<HotplugThread>(this);
     mHotPlugThread->run();
     cameraCount = 0;
+    deviceIdBase = property_get_int32("persist.vendor.camera.idbase.usb", mCfg.cameraIdOffset);
+
     property_set("vendor.vehicle.camera.count", "0");
     property_set("vendor.vehicle.camera.ready", "false");
 }
@@ -118,26 +132,42 @@ ndk::ScopedAStatus ExternalCameraProvider::getCameraDeviceInterface(
     if (_aidl_return == nullptr) {
         return fromStatus(Status::ILLEGAL_ARGUMENT);
     }
-    std::string cameraDevicePath, deviceVersion;
-    bool match = matchDeviceName(mCfg.cameraIdOffset, in_cameraDeviceName, &deviceVersion,
-                                 &cameraDevicePath);
+
+    std::string cameraDevicePath, deviceVersion, cameraDeviceId;
+    bool match = matchDeviceId(in_cameraDeviceName, &deviceVersion, &cameraDeviceId);
 
     if (!match) {
+        ALOGE("%s: Camera device name %s does not match expected format",
+              __FUNCTION__, in_cameraDeviceName.c_str());
         *_aidl_return = nullptr;
         return fromStatus(Status::ILLEGAL_ARGUMENT);
     }
 
     if (mCameraStatusMap.count(in_cameraDeviceName) == 0 ||
         mCameraStatusMap[in_cameraDeviceName] != CameraDeviceStatus::PRESENT) {
+        ALOGE("%s: Camera device %s not present", __FUNCTION__, in_cameraDeviceName.c_str());
         *_aidl_return = nullptr;
         return fromStatus(Status::ILLEGAL_ARGUMENT);
     }
 
-    ALOGV("Constructing external camera device");
+    // Check if we have a device path mapped to this camera ID
+    auto it = mCameraIdMap.find(cameraDeviceId);
+    if (it == mCameraIdMap.end()) {
+        ALOGE("%s: No device path found for camera ID %s",
+              __FUNCTION__, cameraDeviceId.c_str());
+        *_aidl_return = nullptr;
+        return fromStatus(Status::ILLEGAL_ARGUMENT);
+    }
+    cameraDevicePath = it->second;
+
+    ALOGD("%s: Opening camera device %s (path: %s, id: %s)",
+          __FUNCTION__, in_cameraDeviceName.c_str(), cameraDevicePath.c_str(), cameraDeviceId.c_str());
+
     std::shared_ptr<ExternalCameraDevice> deviceImpl =
-            ndk::SharedRefBase::make<ExternalCameraDevice>(cameraDevicePath, mCfg);
+            ndk::SharedRefBase::make<ExternalCameraDevice>(cameraDevicePath, mCfg, cameraDeviceId);
     if (deviceImpl == nullptr || deviceImpl->isInitFailed()) {
-        ALOGE("%s: camera device %s init failed!", __FUNCTION__, cameraDevicePath.c_str());
+        ALOGE("%s: Camera device %s initialization failed!",
+              __FUNCTION__, cameraDevicePath.c_str());
         *_aidl_return = nullptr;
         return fromStatus(Status::INTERNAL_ERROR);
     }
@@ -145,7 +175,7 @@ ndk::ScopedAStatus ExternalCameraProvider::getCameraDeviceInterface(
     IF_ALOGV() {
         int interfaceVersion;
         deviceImpl->getInterfaceVersion(&interfaceVersion);
-        ALOGV("%s: device interface version: %d", __FUNCTION__, interfaceVersion);
+        ALOGV("%s: Device interface version: %d", __FUNCTION__, interfaceVersion);
     }
 
     *_aidl_return = deviceImpl;
@@ -175,14 +205,15 @@ ndk::ScopedAStatus ExternalCameraProvider::isConcurrentStreamCombinationSupporte
     return fromStatus(Status::OK);
 }
 
-void ExternalCameraProvider::addExternalCamera(const char* devName) {
-    ALOGV("%s: ExtCam: adding %s to External Camera HAL!", __FUNCTION__, devName);
+void ExternalCameraProvider::addExternalCamera(const char* devName,const std::string cameraId) {
     Mutex::Autolock _l(mLock);
     std::string deviceName;
-    std::string cameraId =
-            std::to_string(mCfg.cameraIdOffset + std::atoi(devName + kDevicePrefixLen));
+    mCameraIdMap[cameraId] = devName;
     deviceName =
             std::string("device@") + ExternalCameraDevice::kDeviceVersion + "/external/" + cameraId;
+
+    ALOGI("%s: ExtCam: adding %s to External Camera HAL! cameraId:%s deviceName:%s", __FUNCTION__, devName,cameraId.c_str(),deviceName.c_str());
+
     mCameraStatusMap[deviceName] = CameraDeviceStatus::PRESENT;
     if (mCallback != nullptr) {
         mCallback->cameraDeviceStatusChange(deviceName, CameraDeviceStatus::PRESENT);
@@ -190,6 +221,8 @@ void ExternalCameraProvider::addExternalCamera(const char* devName) {
 }
 
 void ExternalCameraProvider::deviceAdded(const char* devName) {
+    std::string cameraId = std::to_string(deviceIdBase +
+                                          std::atoi(devName + kDevicePrefixLen));
     {
         base::unique_fd fd(::open(devName, O_RDWR));
         if (fd.get() < 0) {
@@ -200,7 +233,7 @@ void ExternalCameraProvider::deviceAdded(const char* devName) {
         struct v4l2_capability capability;
         int ret = ioctl(fd.get(), VIDIOC_QUERYCAP, &capability);
         if (ret < 0) {
-            ALOGE("%s v4l2 QUERYCAP %s failed", __FUNCTION__, devName);
+            ALOGE("%s: VIDIOC_QUERYCAP failed: %s", __FUNCTION__, strerror(errno));
             return;
         }
 
@@ -208,17 +241,65 @@ void ExternalCameraProvider::deviceAdded(const char* devName) {
             ALOGW("%s device %s does not support VIDEO_CAPTURE", __FUNCTION__, devName);
             return;
         }
+        ALOGD("capability.card = %s", capability.card);
+        ALOGD("capability.driver = %s", capability.driver);
+        ALOGD("capability.bus_info = %s", capability.bus_info);
+        ALOGD("capability.capabilities = %x", capability.capabilities);
+        ALOGD("capability.device_caps = %x", capability.device_caps);
+        ALOGD("capability.reserved = %s", (char *)capability.reserved);
+        cameraId =  std::to_string(cameraCount + deviceIdBase);
+        // Check if this device is in the idmap configuration
+        // Try to find best match based on priority:
+        // 1. Device path match (most specific)
+        // 2. Bus info match (moderately specific)
+        // 3. Card name match (least specific)
+        std::shared_ptr<android::hardware::camera::external::common::IdMap> bestMatch;
+        int bestMatchPriority = 0;  // 0=no match, 1=card, 2=bus_info, 3=dev
+
+        for (const auto& idMap : mCfg.mIdMaps) {
+            bool cardMatch = (!idMap->card.empty() &&
+                !strcmp(reinterpret_cast<const char*>(capability.card), idMap->card.c_str()));
+            bool busMatch = (!idMap->bus_info.empty() &&
+                !strcmp(reinterpret_cast<const char*>(capability.bus_info), idMap->bus_info.c_str()));
+            bool devMatch = (!idMap->dev.empty() &&
+                strstr(devName, idMap->dev.c_str()) != nullptr);
+
+            // Determine match priority
+            int matchPriority = 0;
+            if (devMatch) {
+                matchPriority = 3;  // Highest priority
+            } else if (busMatch) {
+                matchPriority = 2;  // Medium priority
+            } else if (cardMatch) {
+                matchPriority = 1;  // Lowest priority
+            }
+
+            // Update best match if we found a higher priority match
+            if (matchPriority > bestMatchPriority) {
+                bestMatchPriority = matchPriority;
+                bestMatch = idMap;
+            }
+        }
+
+        if (bestMatch) {
+            ALOGI("%s: Found best matching device (priority=%d) in idmap: id='%s'",
+                  __FUNCTION__, bestMatchPriority, bestMatch->id.c_str());
+            ALOGD("  card='%s'", !bestMatch->card.empty() ? bestMatch->card.c_str() : "(empty)");
+            ALOGD("  bus_info='%s'", !bestMatch->bus_info.empty() ? bestMatch->bus_info.c_str() : "(empty)");
+            ALOGD("  dev='%s'", !bestMatch->dev.empty() ? bestMatch->dev.c_str() : "(empty)");
+            cameraId = bestMatch->id;
+        }
     }
 
     // See if we can initialize ExternalCameraDevice correctly
     std::shared_ptr<ExternalCameraDevice> deviceImpl =
-            ndk::SharedRefBase::make<ExternalCameraDevice>(devName, mCfg);
+            ndk::SharedRefBase::make<ExternalCameraDevice>(devName, mCfg, cameraId);
     if (deviceImpl == nullptr || deviceImpl->isInitFailed()) {
         ALOGW("%s: Attempt to init camera device %s failed!", __FUNCTION__, devName);
         return;
     }
     deviceImpl.reset();
-    addExternalCamera(devName);
+    addExternalCamera(devName,cameraId);
     cameraCount++;
     std::string cameraCount_str = std::to_string(cameraCount);
     ALOGD("%s cameraCount(%d)", __FUNCTION__, cameraCount);
@@ -228,21 +309,21 @@ void ExternalCameraProvider::deviceAdded(const char* devName) {
 void ExternalCameraProvider::deviceRemoved(const char* devName) {
     Mutex::Autolock _l(mLock);
     std::string deviceName;
-    std::string cameraId =
-            std::to_string(mCfg.cameraIdOffset + std::atoi(devName + kDevicePrefixLen));
+    std::string cameraId = getCameraIdByDevicePath(std::string(devName), mCameraIdMap);
 
     deviceName =
             std::string("device@") + ExternalCameraDevice::kDeviceVersion + "/external/" + cameraId;
 
     if (mCameraStatusMap.erase(deviceName) == 0) {
         // Unknown device, do not fire callback
-        ALOGE("%s: cannot find camera device to remove %s", __FUNCTION__, devName);
+        ALOGE("%s: cannot find camera device to remove %s,%s", __FUNCTION__, devName,deviceName.c_str());
         return;
     }
 
     if (mCallback != nullptr) {
         mCallback->cameraDeviceStatusChange(deviceName, CameraDeviceStatus::NOT_PRESENT);
     }
+    mCameraIdMap.erase(cameraId);
     cameraCount--;
     std::string cameraCount_str = std::to_string(cameraCount);
     ALOGD("%s cameraCount(%d)", __FUNCTION__, cameraCount);

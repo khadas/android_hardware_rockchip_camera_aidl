@@ -68,7 +68,7 @@ class ExternalCameraProvider : public BnCameraProvider {
             bool* _aidl_return) override;
 
   private:
-    void addExternalCamera(const char* devName);
+    void addExternalCamera(const char* devName,const std::string cameraId);
     void deviceAdded(const char* devName);
     void deviceRemoved(const char* devName);
     void updateAttachedCameras();
