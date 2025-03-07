@@ -127,7 +127,7 @@ CachedStreamBuffer::CachedStreamBuffer(CachedStreamBuffer&& rhs) noexcept
 }
 
 CachedStreamBuffer::~CachedStreamBuffer() {
-    LOG_ALWAYS_FATAL_IF(!mProcessed);
+    //LOG_ALWAYS_FATAL_IF(!mProcessed);
     //ALOGD("%s mStreamId:%d,mBufferId:%d,mAcquireFence:%d",__FUNCTION__,mStreamId,mBufferId,mAcquireFence);
     if (mStreamId >= 0) {
         //LOG_ALWAYS_FATAL_IF(!mBuffer);

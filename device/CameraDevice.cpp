@@ -229,7 +229,14 @@ ScopedAStatus CameraDevice::open(const std::shared_ptr<ICameraDeviceCallback>& c
         ALOGE("%s: cannot open camera %s!", __FUNCTION__, mCameraId.c_str());
         return toScopedAStatus(getAidlStatus(res));
     }
+    if (device == nullptr) {
+        ALOGE("%s: cannot open camera %s! device is nullptr", __FUNCTION__, mCameraId.c_str());
+        return toScopedAStatus(getAidlStatus(ENODEV));
+    }
+    ALOGD("%s: id:%s", __FUNCTION__,mCameraId.c_str());
+
     mHwCamera->setDevice(device);
+
     *session = ndk::SharedRefBase::make<CameraDeviceSession>(
         mSelf.lock(), callback, *mHwCamera);
     return ScopedAStatus::ok();

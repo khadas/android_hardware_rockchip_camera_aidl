@@ -268,6 +268,7 @@ CameraDeviceSession::CameraDeviceSession(
 }
 
 bool CameraDeviceSession::initialize(){
+    Mutex::Autolock _l(mStateLock);
         /** Initialize device with callback functions */
     ATRACE_BEGIN("camera3->initialize");
     status_t res = mDevice->ops->initialize(mDevice, this);
@@ -334,7 +335,10 @@ bool CameraDeviceSession::shouldFreeBufEarly() {
     return property_get_bool("ro.vendor.camera.free_buf_early", 0) == 1;
 }
 CameraDeviceSession::~CameraDeviceSession() {
-    closeImpl();
+    if (!isClosed()) {
+        ALOGE("CameraDeviceSession deleted before close!");
+        closeImpl();
+    }
 
     // mCaptureRequests.cancel();
     mDelayedCaptureResults.cancel();
@@ -342,15 +346,54 @@ CameraDeviceSession::~CameraDeviceSession() {
     mDelayedCaptureThread.join();
 }
 
+bool CameraDeviceSession::isClosed() {
+    Mutex::Autolock _l(mStateLock);
+    return mClosed;
+}
+
+
+Status CameraDeviceSession::initStatus() const {
+    Mutex::Autolock _l(mStateLock);
+    Status status = Status::OK;
+    if (mInitFail) {
+        status = Status::INTERNAL_ERROR;
+    } else if (mDisconnected) {
+        status = Status::CAMERA_DISCONNECTED;
+    } else if (mClosed) {
+        status = Status::INTERNAL_ERROR;
+    }
+    return status;
+}
+
+
 ScopedAStatus CameraDeviceSession::close() {
     closeImpl();
     return ScopedAStatus::ok();
 }
 
+/**
+ * Configures camera streams based on the provided stream configuration.
+ *
+ * This method sets up camera streams according to the specified configuration,
+ * manages stream mapping, validates stream parameters, and configures the hardware
+ * camera device. It handles stream creation, updates, and cleanup of deleted streams.
+ *
+ * @param cfg Stream configuration containing stream parameters and operation mode
+ * @param halStreamsOut Output vector to store the configured HAL streams
+ *
+ * @return ScopedAStatus Returns OK on success, appropriate error status otherwise
+ *         Possible errors:
+ *         - Status::INTERNAL_ERROR if stream configuration fails
+ *         - Status::ILLEGAL_ARGUMENT if invalid stream parameters are provided
+ */
 ScopedAStatus CameraDeviceSession::configureStreams(
         const StreamConfiguration& cfg,
         std::vector<HalStream>* halStreamsOut) {
-
+    Status initstatus = initStatus();
+    if (initstatus != Status::OK) {
+        ALOGE("%s: camera init failed or disconnected", __FUNCTION__);
+        return toScopedAStatus(initstatus);
+    }
     camera3_stream_configuration_t stream_list{};
     std::vector<camera3_stream_t*> streams;
     stream_list.operation_mode = static_cast<uint32_t>(cfg.operationMode);
@@ -523,6 +566,11 @@ ScopedAStatus CameraDeviceSession::configureStreams(
 ScopedAStatus CameraDeviceSession::constructDefaultRequestSettings(
         const RequestTemplate tpl,
         CameraMetadata* metadata) {
+    Status status = initStatus();
+    if (status != Status::OK) {
+        ALOGE("%s: camera init failed or disconnected", __FUNCTION__);
+        return toScopedAStatus(status);
+    }
 #if 0
     auto maybeMetadata = serializeCameraMetadataMap(
         mParent->constructDefaultRequestSettings(tpl));
@@ -564,13 +612,16 @@ ScopedAStatus CameraDeviceSession::constructDefaultRequestSettings(
 
 ScopedAStatus CameraDeviceSession::flush() {
     ALOGE("%s",__FUNCTION__);
-    flushImpl(std::chrono::steady_clock::now());
-    // Flush is always supported on device 3.1 or later
-    status_t ret = mDevice->ops->flush(mDevice);
-    if (ret != OK) {
-        return toScopedAStatus(Status::INTERNAL_ERROR);
+    Status status = initStatus();
+    if (status == Status::OK) {
+        flushImpl(std::chrono::steady_clock::now());
+        // Flush is always supported on device 3.1 or later
+        status_t ret = mDevice->ops->flush(mDevice);
+        if (ret != OK) {
+            return toScopedAStatus(Status::INTERNAL_ERROR);
+        }
     }
-    return ScopedAStatus::ok();
+    return toScopedAStatus(status);
 }
 
 ScopedAStatus CameraDeviceSession::getCaptureRequestMetadataQueue(
@@ -698,6 +749,11 @@ ScopedAStatus CameraDeviceSession::processCaptureRequest(
         const std::vector<CaptureRequest>& requests,
         const std::vector<BufferCache>& cachesToRemove,
         int32_t* countOut) {
+    Status status = initStatus();
+    if (status != Status::OK) {
+        ALOGE("%s: camera init failed or disconnected", __FUNCTION__);
+        return toScopedAStatus(status);
+    }
     updateBufferCaches(cachesToRemove);
     for (const BufferCache& bc : cachesToRemove) {
         mStreamBufferCache.remove(bc.bufferId);
@@ -745,6 +801,11 @@ bool CameraDeviceSession::isStreamCombinationSupported(const StreamConfiguration
 }
 
 void CameraDeviceSession::closeImpl() {
+    Mutex::Autolock __l(mStateLock);
+    if(mClosed) {
+        ALOGE("%s: already closed!", __FUNCTION__);
+        return;
+    }
     flushImpl(std::chrono::steady_clock::now());
 
         {
@@ -795,6 +856,8 @@ void CameraDeviceSession::closeImpl() {
 	}
     }
     mMapReqInputBuffers.clear();
+    mClosed = true;
+
 }
 
 void CameraDeviceSession::flushImpl(const std::chrono::steady_clock::time_point start) {
@@ -811,7 +874,7 @@ int CameraDeviceSession::waitFlushingDone(const std::chrono::steady_clock::time_
 
     using namespace std::chrono_literals;
     constexpr int kRecommendedDeadlineMs = 100;
-    constexpr int kFatalDeadlineMs = 3000;
+    constexpr int kFatalDeadlineMs = 1000;
     const auto fatalDeadline = start + (1ms * kFatalDeadlineMs);
 
     const auto checkIfNoBuffersInFlight = [this](){ return mNumBuffersInFlight == 0; };

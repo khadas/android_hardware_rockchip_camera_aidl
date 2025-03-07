@@ -108,6 +108,7 @@ struct CameraDeviceSession : public BnCameraDeviceSession,protected camera3_call
     ~CameraDeviceSession() override;
 
     ScopedAStatus close() override;
+    bool isClosed();
     ScopedAStatus configureStreams(const StreamConfiguration& cfg,
                                    std::vector<HalStream>* halStreamsOut) override;
     ScopedAStatus constructDefaultRequestSettings(RequestTemplate tpl,
@@ -224,8 +225,9 @@ private:
 
     std::thread mCaptureThread;
     std::thread mDelayedCaptureThread;
-
     std::atomic<bool> mFlushing = false;
+
+    mutable Mutex mStateLock;
 
     std::atomic<bool> mClosed = false;
 
@@ -262,7 +264,7 @@ private:
 
     bool mInitFail;
     bool mFirstRequest = false;
-
+    bool mDisconnected = false;
     std::vector<int> mVideoStreamIds;
 
     static HandleImporter sHandleImporter;
@@ -271,6 +273,8 @@ private:
     bool initialize();
 
     static bool shouldFreeBufEarly();
+
+    Status initStatus() const;
 
     // Validate and import request's input buffer and acquire fence
     virtual Status importRequest(

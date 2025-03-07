@@ -31,7 +31,8 @@ namespace device {
 namespace implementation {
 namespace {
 ndk::ScopedAStatus toScopedAStatus(const aidl::android::hardware::camera::common::Status s) {
-    return ndk::ScopedAStatus::fromServiceSpecificError(static_cast<int32_t>(s));
+    return s == aidl::android::hardware::camera::common::Status::OK ?
+	    ndk::ScopedAStatus::ok():ndk::ScopedAStatus::fromServiceSpecificError(static_cast<int32_t>(s));
 }
 
 } // namespace
