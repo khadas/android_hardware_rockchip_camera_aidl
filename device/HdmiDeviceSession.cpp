@@ -66,6 +66,34 @@
 
 //#define DUMP_YUV
 
+#define DMA_BUF_SYNC_READ      (1 << 0)
+#define DMA_BUF_SYNC_WRITE     (2 << 0)
+#define DMA_BUF_SYNC_RW        (DMA_BUF_SYNC_READ | DMA_BUF_SYNC_WRITE)
+#define DMA_BUF_SYNC_START     (0 << 2)
+#define DMA_BUF_SYNC_END       (1 << 2)
+
+struct dma_buf_sync {
+	__u64 flags;
+};
+
+#define DMA_BUF_BASE		'b'
+#define DMA_BUF_IOCTL_SYNC	_IOW(DMA_BUF_BASE, 0, struct dma_buf_sync)
+
+
+int dma_sync_device_to_cpu(int fd) {
+    struct dma_buf_sync sync = {0};
+
+    sync.flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_RW;
+    return ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+}
+
+int dma_sync_cpu_to_device(int fd) {
+    struct dma_buf_sync sync = {0};
+
+    sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_RW;
+    return ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+}
+
 typedef struct Camerawindow {
     int left;
     int right;
@@ -2880,7 +2908,9 @@ bool HdmiDeviceSession::FormatConvertThread::threadLoop() {
     rgaout.width_stride = req->frameIn->mWidth;
     rgaout.height_stride = req->frameIn->mHeight;
     if (req->frameIn->mFourcc == V4L2_PIX_FMT_NV24) {
+        dma_sync_device_to_cpu(req->mShareFd);
         NV24ToNV12((unsigned char*)req->inData,(unsigned char*)req->mVirAddr,req->frameIn->mWidth,req->frameIn->mHeight);
+        dma_sync_cpu_to_device(req->mShareFd);
     }else if (takePicture){
         if (req->frameIn->mFourcc == V4L2_PIX_FMT_NV12) {
             rgain.fmt = HAL_PIXEL_FORMAT_YCrCb_NV12;
