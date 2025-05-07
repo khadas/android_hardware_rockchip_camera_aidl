@@ -1185,16 +1185,8 @@ Status CameraDeviceSession::processOneCaptureRequest(const CaptureRequest& reque
         return FAILURE(Status::INTERNAL_ERROR);
     }
 
-    // mFirstRequest = false;
-    // return Status::OK;
-    if (mCaptureRequests.put(&hwReq)) {
-        mFirstRequest = false;
-        // ALOGD("%s put hwReq.frameNumber:%d hwReq.buffers:%d",__FUNCTION__,hwReq.frameNumber,hwReq.buffers.size());
-        return Status::OK;
-    } else {
-        disposeCaptureRequest(std::move(hwReq));
-        return FAILURE(Status::INTERNAL_ERROR);
-    }
+     mFirstRequest = false;
+     return Status::OK;
 }
 
 void CameraDeviceSession::captureThreadLoop() {
