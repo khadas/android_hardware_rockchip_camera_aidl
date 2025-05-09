@@ -2825,6 +2825,7 @@ bool ExternalCameraDeviceSession::FrameWorkerThread::threadLoop() {
         // No new request, wait again
         return true;
     }
+    Mutex::Autolock _l(parent->mLock);
 
     ALOGV("FrameWorkerThread:%s req->framenumber(%d)", __FUNCTION__, req->frameNumber);
 REDEQUE:

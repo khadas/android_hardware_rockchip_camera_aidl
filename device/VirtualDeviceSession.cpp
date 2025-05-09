@@ -2185,6 +2185,8 @@ bool VirtualDeviceSession::FrameWorkerThread::threadLoop() {
         // No new request, wait again
         return true;
     }
+    Mutex::Autolock _l(parent->mLock);
+
     int mapId = std::stoi(req->cameraId.c_str());
 
     usleep(1000 * 33);

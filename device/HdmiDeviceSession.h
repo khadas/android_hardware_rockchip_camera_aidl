@@ -306,6 +306,7 @@ class HdmiDeviceSession : public BnCameraDeviceSession, public OutputThreadInter
         nsecs_t  mLastFpsTime;
         float  mFps;
     };
+    mutable Mutex mLock;  // Protect all private members except otherwise noted
 
   private:
     bool initialize();
@@ -379,7 +380,6 @@ class HdmiDeviceSession : public BnCameraDeviceSession, public OutputThreadInter
     // Protect (most of) HIDL interface methods from synchronized-entering
     mutable Mutex mInterfaceLock;
 
-    mutable Mutex mLock;  // Protect all private members except otherwise noted
     const std::shared_ptr<ICameraDeviceCallback> mCallback;
     const HdmiConfig& mCfg;
     const common::V1_0::helper::CameraMetadata mCameraCharacteristics;

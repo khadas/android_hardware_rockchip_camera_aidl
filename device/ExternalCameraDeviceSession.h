@@ -351,6 +351,8 @@ class ExternalCameraDeviceSession : public BnCameraDeviceSession, public OutputT
 
     void enqueueV4l2Frame(const std::shared_ptr<V4L2Frame>&);
     bool isNeedCheckIFrame = true;
+    mutable Mutex mLock;  // Protect all private members except otherwise noted
+
   private:
     bool initialize();
     // To init/close different version of output thread
@@ -423,7 +425,6 @@ class ExternalCameraDeviceSession : public BnCameraDeviceSession, public OutputT
     // Protect (most of) HIDL interface methods from synchronized-entering
     mutable Mutex mInterfaceLock;
 
-    mutable Mutex mLock;  // Protect all private members except otherwise noted
     const std::shared_ptr<ICameraDeviceCallback> mCallback;
     const ExternalCameraConfig& mCfg;
     const common::V1_0::helper::CameraMetadata mCameraCharacteristics;

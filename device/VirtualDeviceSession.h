@@ -306,6 +306,9 @@ class VirtualDeviceSession : public BnCameraDeviceSession, public OutputThreadIn
         std::map<int, nsecs_t>  mapLastFpsTime;
         std::map<int, float>  mapFps;
     };
+
+    mutable Mutex mLock;  // Protect all private members except otherwise noted
+
   private:
     bool initialize();
     // To init/close different version of output thread
@@ -387,7 +390,6 @@ class VirtualDeviceSession : public BnCameraDeviceSession, public OutputThreadIn
     // Protect (most of) HIDL interface methods from synchronized-entering
     mutable Mutex mInterfaceLock;
 
-    mutable Mutex mLock;  // Protect all private members except otherwise noted
     const std::shared_ptr<ICameraDeviceCallback> mCallback;
     const VirtualConfig& mCfg;
     const common::V1_0::helper::CameraMetadata mCameraCharacteristics;

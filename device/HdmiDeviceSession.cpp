@@ -2628,6 +2628,8 @@ bool HdmiDeviceSession::FrameWorkerThread::threadLoop() {
         return true;
     }
 
+    Mutex::Autolock _l(parent->mLock);
+
     nsecs_t shutterTs = 0;
     std::shared_ptr<V4L2Frame> frameIn = parent->dequeueV4l2FrameLocked(&shutterTs);
     if (frameIn == nullptr) {
