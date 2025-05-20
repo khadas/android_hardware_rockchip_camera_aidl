@@ -1737,14 +1737,7 @@ std::unique_ptr<V4L2Frame> ExternalCameraDeviceSession::dequeueV4l2FrameLocked(n
         }
     }
 
-    //ALOGV("@%s(%d) select time begin ",__FUNCTION__,__LINE__);
-    ts = select(mV4l2Fd.get() + 1, &fds, NULL, NULL, &tv);
-    //ALOGV("@%s(%d) select time done.",__FUNCTION__,__LINE__);
-    if(ts == 0)
-    {
-        ALOGE("@%s(%d) select time out",__FUNCTION__,__LINE__);
-        return ret;
-    }
+
 
     ATRACE_BEGIN("VIDIOC_DQBUF");
     v4l2_buffer buffer{};
@@ -1760,6 +1753,14 @@ std::unique_ptr<V4L2Frame> ExternalCameraDeviceSession::dequeueV4l2FrameLocked(n
     }
     buffer.memory = V4L2_MEMORY_MMAP;
 RETRY_DQBUF:
+    //ALOGV("@%s(%d) select time begin ",__FUNCTION__,__LINE__);
+    ts = select(mV4l2Fd.get() + 1, &fds, NULL, NULL, &tv);
+    //ALOGV("@%s(%d) select time done.",__FUNCTION__,__LINE__);
+    if(ts == 0)
+    {
+        ALOGE("@%s(%d) select time out",__FUNCTION__,__LINE__);
+        return ret;
+    }
     if (TEMP_FAILURE_RETRY(ioctl(mV4l2Fd.get(), VIDIOC_DQBUF, &buffer)) < 0) {
         ALOGE("%s: VIDIOC_DQBUF fails: %s", __FUNCTION__, strerror(errno));
         return ret;
