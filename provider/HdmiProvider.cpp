@@ -41,6 +41,11 @@ using ::android::hardware::camera::device::implementation::fromStatus;
 using ::android::hardware::camera::external::common::HdmiConfig;
 #define CLEAR(x) memset (&(x), 0, sizeof (x))
 namespace {
+#define V4L2_EVENT_PRIVATE_START          0x08000000
+/* Private v4l2 event */
+#define RK_HDMIRX_V4L2_EVENT_SIGNAL_LOST \
+        (V4L2_EVENT_PRIVATE_START + 1)
+
 // "device@<version>/hdmi/<id>"
 const std::regex kDeviceNameRE("device@([0-9]+\\.[0-9]+)/hdmi/(.+)");
 const int kMaxDevicePathLen = 256;
@@ -353,15 +358,24 @@ bool HdmiProvider::HotplugThread::initialize() {
 
     ret = ioctl(mFd, VIDIOC_SUBSCRIBE_EVENT, &sub);
     if (ret < 0) {
-        ALOGE("%s: error subscribing event %x: %s", __FUNCTION__, sub.type, strerror(errno));
+        ALOGE("%s: error subscribing event V4L2_EVENT_SOURCE_CHANGE %x: %s", __FUNCTION__, sub.type, strerror(errno));
         return false;
     }
 
+    CLEAR(sub);
+    sub.type = RK_HDMIRX_V4L2_EVENT_SIGNAL_LOST;
+    ret = ioctl(mFd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+    if (ret < 0) {
+        ALOGE("%s: error subscribing event RK_HDMIRX_V4L2_EVENT_SIGNAL_LOST %x: %s", __FUNCTION__, sub.type, strerror(errno));
+        return false;
+    }
+
+    CLEAR(sub);
     sub.type = V4L2_EVENT_CTRL;
     sub.id = V4L2_CID_DV_RX_POWER_PRESENT;
     ret = ioctl(mFd, VIDIOC_SUBSCRIBE_EVENT, &sub);
     if (ret < 0) {
-        ALOGE("%s: error subscribing event %x: %s", __FUNCTION__, sub.type, strerror(errno));
+        ALOGE("%s: error subscribing event V4L2_CID_DV_RX_POWER_PRESENT %x: %s", __FUNCTION__, sub.type, strerror(errno));
         return false;
     }
 
@@ -399,13 +413,19 @@ bool HdmiProvider::HotplugThread::threadLoop() {
             switch (ev.type) {
                 case V4L2_EVENT_SOURCE_CHANGE:
                     {
-                        ALOGD("%d: V4L2_EVENT_SOURCE_CHANGE value:%d\n", mFd,1);
+                        ALOGD("fd:%d: V4L2_EVENT_SOURCE_CHANGE\n", mFd);
                         mParent->deviceAdded(mDevName.c_str());
+                    }
+                    break;
+                case RK_HDMIRX_V4L2_EVENT_SIGNAL_LOST:
+                    {
+                        ALOGD("fd:%d: RK_HDMIRX_V4L2_EVENT_SIGNAL_LOST\n", mFd);
+                        mParent->deviceRemoved(mDevName.c_str());
                     }
                     break;
                 case V4L2_EVENT_CTRL:{
                         struct v4l2_event_ctrl* ctrl =(struct v4l2_event_ctrl*) &(ev.u);
-                        ALOGD("%d:  V4L2_EVENT_CTRL event value:%d \n", mFd,ctrl->value);
+                        ALOGD("fd:%d:  V4L2_EVENT_CTRL event value:%d \n", mFd,ctrl->value);
                         if(ctrl->value){
                             mParent->deviceAdded(mDevName.c_str());
                         }else{
