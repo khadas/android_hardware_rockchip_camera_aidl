@@ -12,6 +12,7 @@
 #include <freetype/ftglyph.h>
 
 #include <png.h>
+#include <pngpriv.h>
 #include "pngstruct.h"
 #include "pnginfo.h"
 
