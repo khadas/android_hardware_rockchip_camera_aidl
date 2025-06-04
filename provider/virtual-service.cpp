@@ -33,7 +33,7 @@ int main() {
 
     std::shared_ptr<VirtualProvider> defaultProvider =
             ndk::SharedRefBase::make<VirtualProvider>();
-    const std::string serviceName = std::string(VirtualProvider::descriptor) + "/virtual/0";
+    const std::string serviceName = std::string(VirtualProvider::descriptor) + "/rkvirt/0";
 
 #ifdef LAZY_SERVICE
     binder_exception_t ret = AServiceManager_registerLazyService(defaultProvider->asBinder().get(),

@@ -1,5 +1,5 @@
 service vendor.camera.provider-virtual /vendor/bin/hw/android.hardware.camera.provider-V1-virtual-service
-    interface aidl android.hardware.camera.provider.ICameraProvider/virtual/0
+    interface aidl android.hardware.camera.provider.ICameraProvider/rkvirt/0
     class hal
     user cameraserver
     group audio camera input drmrpc usb

@@ -41,8 +41,8 @@ using ::android::hardware::camera::device::implementation::fromStatus;
 using ::android::hardware::camera::external::common::VirtualConfig;
 #define CLEAR(x) memset (&(x), 0, sizeof (x))
 namespace {
-// "device@<version>/virtual/<id>"
-const std::regex kDeviceNameRE("device@([0-9]+\\.[0-9]+)/virtual/(.+)");
+// "device@<version>/rkvirt/<id>"
+const std::regex kDeviceNameRE("device@([0-9]+\\.[0-9]+)/rkvirt/(.+)");
 const int kMaxDevicePathLen = 256;
 constexpr char kDevicePath[] = "/dev/";
 constexpr char kPrefix[] = "video";
@@ -187,7 +187,7 @@ void VirtualProvider::addVritual(const char* devName) {
     std::string cameraId =
             std::to_string(mCfg.cameraIdOffset + std::atoi(devName));
     deviceName =
-            std::string("device@") + VirtualDevice::kDeviceVersion + "/virtual/" + cameraId;
+            std::string("device@") + VirtualDevice::kDeviceVersion + "/rkvirt/" + cameraId;
     mCameraStatusMap[deviceName] = CameraDeviceStatus::PRESENT;
     if (mCallback != nullptr) {
         mCallback->cameraDeviceStatusChange(deviceName, CameraDeviceStatus::PRESENT);
@@ -214,7 +214,7 @@ void VirtualProvider::deviceRemoved(const char* devName) {
             std::to_string(mCfg.cameraIdOffset + std::atoi(devName + kDevicePrefixLen));
 
     deviceName =
-            std::string("device@") + VirtualDevice::kDeviceVersion + "/virtual/" + cameraId;
+            std::string("device@") + VirtualDevice::kDeviceVersion + "/rkvirt/" + cameraId;
 
     if (mCameraStatusMap.erase(deviceName) == 0) {
         // Unknown device, do not fire callback

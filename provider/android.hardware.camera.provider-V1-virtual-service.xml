@@ -4,7 +4,7 @@
         <version>2</version>
         <interface>
             <name>ICameraProvider</name>
-            <instance>virtual/0</instance>
+            <instance>rkvirt/0</instance>
         </interface>
     </hal>
 </manifest>
