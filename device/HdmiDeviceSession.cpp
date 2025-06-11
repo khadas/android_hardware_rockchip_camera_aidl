@@ -1486,7 +1486,7 @@ int HdmiDeviceSession::configureV4l2StreamLocked(SupportedV4L2Format& v4l2Fmt,
 
         FD_ZERO(&fds);
         FD_SET(mV4l2Fd.get(), &fds);
-        tv.tv_sec = 2;
+        tv.tv_sec = 1;
         ALOGV("@%s(%d) select time begin ",__FUNCTION__,__LINE__);
         ts = select(mV4l2Fd.get() + 1, &fds, NULL, NULL, &tv);
         ALOGV("@%s(%d) select time done.",__FUNCTION__,__LINE__);
@@ -1522,7 +1522,7 @@ std::unique_ptr<V4L2Frame> HdmiDeviceSession::dequeueV4l2FrameLocked(nsecs_t* sh
 
     FD_ZERO(&fds);
     FD_SET(mV4l2Fd.get(), &fds);
-    tv.tv_sec = 2;
+    tv.tv_sec = 1;
     std::unique_ptr<V4L2Frame> ret = nullptr;
     if (shutterTs == nullptr) {
         ALOGE("%s: shutterTs must not be null!", __FUNCTION__);
@@ -2634,7 +2634,8 @@ bool HdmiDeviceSession::FrameWorkerThread::threadLoop() {
     std::shared_ptr<V4L2Frame> frameIn = parent->dequeueV4l2FrameLocked(&shutterTs);
     if (frameIn == nullptr) {
         ALOGE("%s: V4L2 deque frame failed!", __FUNCTION__);
-        return true;
+        parent->notifyError(req->frameNumber, /*stream*/ -1, ErrorCode::ERROR_DEVICE);
+        return false;
     }
     clock_gettime(CLOCK_MONOTONIC_COARSE, &req->reqTime );
     debugShowFPS(req->cameraId);

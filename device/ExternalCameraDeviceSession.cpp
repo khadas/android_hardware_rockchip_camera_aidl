@@ -2834,7 +2834,8 @@ REDEQUE:
     std::shared_ptr<V4L2Frame> frameIn = parent->dequeueV4l2FrameLocked(&shutterTs);
     if (frameIn == nullptr) {
         ALOGE("%s: V4L2 deque frame failed!", __FUNCTION__);
-        return true;
+        parent->notifyError(req->frameNumber, /*stream*/ -1, ErrorCode::ERROR_DEVICE);
+        return false;
     }
     clock_gettime(CLOCK_MONOTONIC_COARSE, &req->reqTime );
 
