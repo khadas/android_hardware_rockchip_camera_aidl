@@ -208,6 +208,8 @@ void convertFromAidl(const Stream &src, Camera3Stream* dst) {
     dst->height = src.height;
     dst->format = (int) src.format;
     dst->data_space = (android_dataspace_t) src.dataSpace;
+    ALOGD("%s %d format:%d (%dx%d)",__FUNCTION__, src.id , src.format,src.width, src.height);
+
     dst->rotation = (int) src.rotation;
     dst->usage = (uint32_t) src.usage;
     // Fields to be filled by HAL (max_buffers, priv) are initialized to 0
@@ -394,8 +396,29 @@ ScopedAStatus CameraDeviceSession::configureStreams(
         ALOGE("%s: camera init failed or disconnected", __FUNCTION__);
         return toScopedAStatus(initstatus);
     }
+
+    Mutex::Autolock _l(mInflightLock);
+    if (!mInflightBuffers.empty()) {
+        ALOGE("%s: trying to configureStreams while there are still %zu inflight buffers!",
+                __FUNCTION__, mInflightBuffers.size());
+        return toScopedAStatus(Status::INTERNAL_ERROR);
+    }
+
     camera3_stream_configuration_t stream_list{};
     std::vector<camera3_stream_t*> streams;
+    if (!preProcessConfigurationLocked(cfg, &stream_list, &streams)) {
+        return toScopedAStatus(Status::INTERNAL_ERROR);
+    }
+
+    ALOGD("%s:%s:%d cfg={ "
+          ".streams.size=%zu, .operationMode=%u, .cfg.sessionParams.size()=%zu, "
+          " .streamConfigCounter=%d, .multiResolutionInputImage=%s }",
+          kClass, __func__, __LINE__,
+          cfg.streams.size(), static_cast<uint32_t>(cfg.operationMode),
+          cfg.sessionParams.metadata.size(), cfg.streamConfigCounter,
+          (cfg.multiResolutionInputImage ? "true" : "false"));
+
+#if 0
     stream_list.operation_mode = static_cast<uint32_t>(cfg.operationMode);
     stream_list.num_streams = cfg.streams.size();
     streams.resize(stream_list.num_streams);
@@ -465,6 +488,7 @@ ScopedAStatus CameraDeviceSession::configureStreams(
             }
         }
     }
+#endif
 
     for (const auto& s : cfg.streams) {
         const uint32_t dataspaceBits = static_cast<uint32_t>(s.dataSpace);
