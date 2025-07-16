@@ -40,6 +40,10 @@
 #include <hardware/gralloc1.h>
 #define RK_GRALLOC_USAGE_RANGE_FULL GRALLOC1_CONSUMER_USAGE_PRIVATE_17
 #define RK_GRALLOC_USAGE_YUV_COLOR_SPACE_BT601 GRALLOC1_CONSUMER_USAGE_PRIVATE_18
+#define GRALLOC_USAGE_PRIVATE_11               (1ULL << 56)
+/* Gralloc 4.0 中, 表征 "调用 alloc() 的 client 要求分配的 buffer 的所有物理 page 的地址都在 4G 以内".
+*/
+#define RK_GRALLOC_USAGE_RGA_ACCESS     GRALLOC_USAGE_PRIVATE_11
 
 namespace android {
 namespace hardware {
