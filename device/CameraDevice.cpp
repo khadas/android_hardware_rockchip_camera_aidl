@@ -27,6 +27,7 @@
 #include "debug.h"
 
 #include <utils/Trace.h>
+#include <cutils/properties.h>
 
 namespace android {
 namespace hardware {
@@ -149,7 +150,10 @@ ScopedAStatus CameraDevice::getResourceCost(CameraResourceCost* resCost) {
     struct camera_info info;
     int ret = mHwCamera->getModule()->getCameraInfo(mCameraIdInt, &info);
     if (ret == OK) {
-        resCost->resourceCost = info.resource_cost;
+
+        int32_t resourceCost = property_get_int32("persist.vendor.camera.cost", info.resource_cost);
+
+        resCost->resourceCost = resourceCost;
         ALOGD("%s info.resource_cost:%d",__FUNCTION__,resCost->resourceCost);
     }
 #if 0

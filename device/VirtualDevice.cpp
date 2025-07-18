@@ -28,6 +28,7 @@
 #include <linux/videodev2.h>
 #include <regex>
 #include <set>
+#include <cutils/properties.h>
 
 namespace android {
 namespace hardware {
@@ -91,7 +92,10 @@ ndk::ScopedAStatus VirtualDevice::getResourceCost(CameraResourceCost* _aidl_retu
         return fromStatus(Status::ILLEGAL_ARGUMENT);
     }
 
-    _aidl_return->resourceCost = 100;
+    int32_t resourceCost = property_get_int32("persist.vendor.camera.cost", /*default*/10);
+
+    _aidl_return->resourceCost = resourceCost;
+
     return fromStatus(Status::OK);
 }
 
