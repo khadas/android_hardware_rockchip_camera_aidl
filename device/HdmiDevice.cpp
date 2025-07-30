@@ -350,6 +350,10 @@ status_t HdmiDevice::initAvailableCapabilities(
     }
 
     std::vector<uint8_t> availableCapabilities;
+    int32_t systemCamera = property_get_int32("persist.vendor.camera.hdmi.system", /*default*/0);
+    if (systemCamera == 1) {
+        availableCapabilities.push_back(ANDROID_REQUEST_AVAILABLE_CAPABILITIES_SYSTEM_CAMERA);
+    }
     if (hasDepth) {
         availableCapabilities.push_back(ANDROID_REQUEST_AVAILABLE_CAPABILITIES_DEPTH_OUTPUT);
     }
