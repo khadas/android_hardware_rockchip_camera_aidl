@@ -61,6 +61,16 @@ class ExternalCameraDevice : public BnCameraDevice {
     ndk::ScopedAStatus turnOnTorchWithStrengthLevel(int32_t in_torchStrength) override;
     ndk::ScopedAStatus getTorchStrengthLevel(int32_t* _aidl_return) override;
 
+#ifdef CAMERA_V3_SUPPORT
+    // V3 methods
+    ndk::ScopedAStatus constructDefaultRequestSettings(
+            RequestTemplate in_type, CameraMetadata* _aidl_return) override;
+    ndk::ScopedAStatus isStreamCombinationWithSettingsSupported(
+            const StreamConfiguration& in_streams, bool* _aidl_return) override;
+    ndk::ScopedAStatus getSessionCharacteristics(
+            const StreamConfiguration& in_sessionConfig, CameraMetadata* _aidl_return) override;
+#endif // CAMERA_V3_SUPPORT
+
     binder_status_t dump(int fd, const char** args, uint32_t numArgs) override;
 
     // Caller must use this method to check if CameraDevice ctor failed
@@ -186,6 +196,7 @@ class ExternalCameraDevice : public BnCameraDevice {
             ANDROID_STATISTICS_INFO_AVAILABLE_LENS_SHADING_MAP_MODES,
             ANDROID_STATISTICS_INFO_MAX_FACE_COUNT,
             ANDROID_SYNC_MAX_LATENCY};
+        std::unordered_map<RequestTemplate, CameraMetadata> mDefaultRequests;
 };
 
 }  // namespace implementation

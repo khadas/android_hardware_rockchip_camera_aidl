@@ -588,6 +588,19 @@ ScopedAStatus CameraDeviceSession::configureStreams(
     }
 }
 
+
+#ifdef CAMERA_V3_SUPPORT
+::ndk::ScopedAStatus CameraDeviceSession::configureStreamsV2(const ::aidl::android::hardware::camera::device::StreamConfiguration& in_requestedConfiguration, ::aidl::android::hardware::camera::device::ConfigureStreamsRet* _aidl_return){
+     // For now, delegate to the existing configureStreams implementation
+    std::vector<HalStream> halStreams;
+    ScopedAStatus status = configureStreams(in_requestedConfiguration, &halStreams);
+    if (status.isOk()) {
+        _aidl_return->halStreams = std::move(halStreams);
+    }
+    return status;
+}
+#endif // CAMERA_V3_SUPPORT
+
 ScopedAStatus CameraDeviceSession::constructDefaultRequestSettings(
         const RequestTemplate tpl,
         CameraMetadata* metadata) {
@@ -596,17 +609,6 @@ ScopedAStatus CameraDeviceSession::constructDefaultRequestSettings(
         ALOGE("%s: camera init failed or disconnected", __FUNCTION__);
         return toScopedAStatus(status);
     }
-#if 0
-    auto maybeMetadata = serializeCameraMetadataMap(
-        mParent->constructDefaultRequestSettings(tpl));
-
-    if (maybeMetadata) {
-        *metadata = std::move(maybeMetadata.value());
-        return ScopedAStatus::ok();
-    } else {
-        return toScopedAStatus(Status::INTERNAL_ERROR);
-    }
-#endif
     const camera_metadata_t *rawRequest;
     int type = (int) tpl;
     ATRACE_BEGIN("camera3->construct_default_request_settings");
@@ -617,20 +619,7 @@ ScopedAStatus CameraDeviceSession::constructDefaultRequestSettings(
                 __FUNCTION__, type);
         return toScopedAStatus(Status::ILLEGAL_ARGUMENT);
     } else {
-        mOverridenRequest.clear();
-        mOverridenRequest.append(rawRequest);
-        // Derive some new keys for backward compatibility
-        if (mDerivePostRawSensKey && !mOverridenRequest.exists(
-                ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST)) {
-            int32_t defaultBoost[1] = {100};
-            mOverridenRequest.update(
-                    ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST,
-                    defaultBoost, 1);
-        }
-        const camera_metadata_t *metaBuffer =
-                mOverridenRequest.getAndLock();
-        convertToAidl(metaBuffer, metadata);
-        mOverridenRequest.unlock(metaBuffer);
+        convertToAidl(rawRequest, metadata);
     }
     return ScopedAStatus::ok();
 }

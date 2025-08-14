@@ -4101,6 +4101,21 @@ bool HdmiDeviceSession::OutputThread::threadLoop() {
 
 // End HdmiDeviceSession::OutputThread functions
 
+#ifdef CAMERA_V3_SUPPORT
+// V3 method implementations
+ScopedAStatus HdmiDeviceSession::configureStreamsV2(
+        const StreamConfiguration& in_requestedConfiguration,
+        ::aidl::android::hardware::camera::device::ConfigureStreamsRet* _aidl_return) {
+    // For HDMI camera, delegate to the existing configureStreams implementation
+    std::vector<HalStream> halStreams;
+    ScopedAStatus status = configureStreams(in_requestedConfiguration, &halStreams);
+    if (status.isOk()) {
+        _aidl_return->halStreams = std::move(halStreams);
+    }
+    return status;
+}
+#endif // CAMERA_V3_SUPPORT
+
 }  // namespace implementation
 }  // namespace device
 }  // namespace camera

@@ -29,6 +29,7 @@
 #include <regex>
 #include <set>
 #include <cutils/properties.h>
+#include "metadata_utils.h"
 
 namespace android {
 namespace hardware {
@@ -955,6 +956,45 @@ binder_status_t VirtualDevice::dump(int fd, const char** args, uint32_t numArgs)
 
     return session->dump(fd, args, numArgs);
 }
+
+#ifdef CAMERA_V3_SUPPORT
+// V3 method implementations
+ndk::ScopedAStatus VirtualDevice::constructDefaultRequestSettings(
+        RequestTemplate in_type,
+        CameraMetadata* _aidl_return) {
+    // For virtual camera, delegate to the session's constructDefaultRequestSettings
+    std::shared_ptr<VirtualDeviceSession> session = mSession.lock();
+    if (session == nullptr) {
+        ALOGE("%s: No active session available", __FUNCTION__);
+        return fromStatus(Status::INTERNAL_ERROR);
+    }
+    return session->constructDefaultRequestSettings(in_type, _aidl_return);
+}
+
+ndk::ScopedAStatus VirtualDevice::isStreamCombinationWithSettingsSupported(
+        const StreamConfiguration& in_streams, bool* _aidl_return) {
+    // For virtual camera, delegate to the existing method
+    return isStreamCombinationSupported(in_streams, _aidl_return);
+}
+
+ndk::ScopedAStatus VirtualDevice::getSessionCharacteristics(
+        const StreamConfiguration& in_sessionConfig, CameraMetadata* _aidl_return) {
+    CameraMetadataMap sessionMetadata;
+    camera_metadata_entry_t getZoomRatioRange = mCameraCharacteristics.find(ANDROID_CONTROL_ZOOM_RATIO_RANGE);
+    sessionMetadata[ANDROID_CONTROL_ZOOM_RATIO_RANGE] = getZoomRatioRange;
+
+    camera_metadata_entry_t getScalerAvailableMaxDigitalZoom = mCameraCharacteristics.find(ANDROID_SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+    sessionMetadata[ANDROID_SCALER_AVAILABLE_MAX_DIGITAL_ZOOM] = getScalerAvailableMaxDigitalZoom;
+
+    auto maybeMetadata = serializeCameraMetadataMap(sessionMetadata);
+    if (!maybeMetadata.has_value()) {
+        ALOGE("%s: Failed to serialize metadata", __FUNCTION__);
+        return fromStatus(Status::INTERNAL_ERROR);
+    }
+    _aidl_return->metadata = std::move(maybeMetadata.value().metadata);
+    return ScopedAStatus::ok();
+}
+#endif // CAMERA_V3_SUPPORT
 
 }  // namespace implementation
 }  // namespace device

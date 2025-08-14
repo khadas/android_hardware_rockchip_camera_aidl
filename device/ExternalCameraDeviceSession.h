@@ -89,6 +89,10 @@ class ExternalCameraDeviceSession : public BnCameraDeviceSession, public OutputT
 
     ScopedAStatus configureStreams(const StreamConfiguration& in_requestedConfiguration,
                                    std::vector<HalStream>* _aidl_return) override;
+#ifdef CAMERA_V3_SUPPORT
+    ScopedAStatus configureStreamsV2(const StreamConfiguration& in_requestedConfiguration,
+                                     ::aidl::android::hardware::camera::device::ConfigureStreamsRet* _aidl_return) override;
+#endif // CAMERA_V3_SUPPORT
     ScopedAStatus constructDefaultRequestSettings(RequestTemplate in_type,
                                                   CameraMetadata* _aidl_return) override;
     ScopedAStatus flush() override;

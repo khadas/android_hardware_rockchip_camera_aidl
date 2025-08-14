@@ -15,38 +15,88 @@
 //
 
 soong_config_module_type {
-    name: "camera_rockchip_soong_gen_defaults",
+    name: "camera_rockchip_cc_defaults",
     module_type: "cc_defaults",
     config_namespace: "camera_rockchip",
+    variables: [
+        "camera_aidl_version",
+    ],
     bool_variables: [
         "osd",
         "virtual",
     ],
-    properties: ["cflags"],
+    properties: [
+        "cflags",
+        "defaults",
+        "shared_libs",
+        "static_libs"
+    ],
+}
+soong_config_string_variable {
+    name: "camera_aidl_version",
+    values: [
+        "v2",
+        "v3",
+    ],
 }
 
-
-camera_rockchip_soong_gen_defaults {
-    name: "camera_rockchip_gen_defaults",
-    soong_config_variables: {
+camera_rockchip_cc_defaults{
+    name: "rockchip_camera_device_aidl_lib_default",
+    soong_config_variables:{
+        camera_aidl_version:{
+            conditions_default:{
+                shared_libs: [
+                    "android.hardware.camera.common-V1-ndk",
+                    "android.hardware.camera.device-V2-ndk",
+                ],
+                static_libs: [
+                    "android.hardware.camera.common-V1-ndk",
+                    "android.hardware.camera.device-V2-ndk",
+                    "android.hardware.camera.provider-V2-ndk",
+                ],
+            },
+            v2: {
+                shared_libs: [
+                    "android.hardware.camera.common-V1-ndk",
+                    "android.hardware.camera.device-V2-ndk",
+                ],
+                static_libs: [
+                    "android.hardware.camera.common-V1-ndk",
+                    "android.hardware.camera.device-V2-ndk",
+                    "android.hardware.camera.provider-V2-ndk",
+                ],
+            },
+            v3: {
+                cflags: ["-DCAMERA_V3_SUPPORT"],
+                shared_libs: [
+                    "android.hardware.camera.common-V1-ndk",
+                    "android.hardware.camera.device-V3-ndk",
+                ],
+                static_libs: [
+                    "android.hardware.camera.device-V3-ndk",
+                    "android.hardware.camera.provider-V3-ndk",
+                ],
+            },
+        },
         osd: {
             cflags: ["-DOSD_ENABLE"],
         },
         virtual: {
             cflags: ["-DCAMERA_SUPPORT_VIRTUAL"],
         },
+    }
 
-   }
 }
 cc_library_shared {
     name: "camera.device-external-impl-rk",
-    defaults: ["camera_rockchip_gen_defaults"],
+    defaults: ["rockchip_camera_device_aidl_lib_default"],
     proprietary: true,
     srcs: [
         "ExternalCameraDevice.cpp",
         "ExternalCameraDeviceSession.cpp",
         "ExternalCameraOfflineSession.cpp",
         "ExternalCameraUtils.cpp",
+        "metadata_utils.cpp",
         "convert.cpp",
         "HandleImporter.cpp",
         "RgaCropScale.cpp",
@@ -58,8 +108,6 @@ cc_library_shared {
         "-DRK_HW_JPEG_DECODER",
     ],
     shared_libs: [
-        "android.hardware.camera.common-V1-ndk",
-        "android.hardware.camera.device-V2-ndk",
         "android.hardware.graphics.allocator-V2-ndk",
         "android.hardware.graphics.mapper@2.0",
         "android.hardware.graphics.mapper@3.0",
@@ -92,6 +140,8 @@ cc_library_shared {
         "libiep_vehicle",
     ],
     static_libs: [
+        "android.hardware.common-V2-ndk",
+        "android.hardware.common.fmq-V1-ndk",
         "android.hardware.camera.common@1.0-helper",
         "libaidlcommonsupport",
         "libft2.nodep"
@@ -120,7 +170,7 @@ cc_library_shared {
 
 cc_library_shared {
     name: "camera.device-internal-impl-rk",
-    defaults: ["hidl_defaults"],
+    defaults: ["rockchip_camera_device_aidl_lib_default"],
     proprietary: true,
     srcs: [
         "AFStateMachine.cpp",
@@ -140,8 +190,6 @@ cc_library_shared {
         "-DRK_HW_JPEG_DECODER",
     ],
     shared_libs: [
-        "android.hardware.camera.common-V1-ndk",
-        "android.hardware.camera.device-V2-ndk",
         "android.hardware.graphics.allocator-V2-ndk",
         "android.hardware.graphics.mapper@2.0",
         "android.hardware.graphics.mapper@3.0",
@@ -176,9 +224,6 @@ cc_library_shared {
     static_libs: [
         "android.hardware.common-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
-        "android.hardware.camera.common-V1-ndk",
-        "android.hardware.camera.device-V2-ndk",
-        "android.hardware.camera.provider-V2-ndk",
         "android.hardware.camera.common@1.0-helper",
         "libaidlcommonsupport",
         "libyuv_static",
@@ -206,7 +251,7 @@ cc_library_shared {
 
 cc_library_shared {
     name: "camera.device-hdmi-impl-rk",
-    defaults: ["hidl_defaults"],
+    defaults: ["rockchip_camera_device_aidl_lib_default"],
     proprietary: true,
     srcs: [
         "HdmiDevice.cpp",
@@ -214,6 +259,7 @@ cc_library_shared {
         "HdmiDeviceOfflineSession.cpp",
         "HdmiUtils.cpp",
         "convert.cpp",
+        "metadata_utils.cpp",
         "HandleImporter.cpp",
         "RgaCropScale.cpp",
     ],
@@ -222,8 +268,6 @@ cc_library_shared {
         "-DRK_DEVICE",
     ],
     shared_libs: [
-        "android.hardware.camera.common-V1-ndk",
-        "android.hardware.camera.device-V2-ndk",
         "android.hardware.graphics.allocator-V2-ndk",
         "android.hardware.graphics.mapper@2.0",
         "android.hardware.graphics.mapper@3.0",
@@ -253,6 +297,8 @@ cc_library_shared {
         "libmpp",
     ],
     static_libs: [
+        "android.hardware.common-V2-ndk",
+        "android.hardware.common.fmq-V1-ndk",
         "android.hardware.camera.common@1.0-helper",
         "libaidlcommonsupport",
     ],
@@ -279,7 +325,7 @@ cc_library_shared {
 
 cc_library_shared {
     name: "camera.device-virtual-impl-rk",
-    defaults: ["camera_rockchip_gen_defaults"],
+    defaults: ["rockchip_camera_device_aidl_lib_default"],
     proprietary: true,
     srcs: [
         "VirtualDevice.cpp",
@@ -287,6 +333,7 @@ cc_library_shared {
         "VirtualDeviceOfflineSession.cpp",
         "VirtualUtils.cpp",
         "convert.cpp",
+        "metadata_utils.cpp",
         "HandleImporter.cpp",
         "RgaCropScale.cpp",
         "osd.cpp"
@@ -296,8 +343,6 @@ cc_library_shared {
         "-DRK_DEVICE",
     ],
     shared_libs: [
-        "android.hardware.camera.common-V1-ndk",
-        "android.hardware.camera.device-V2-ndk",
         "android.hardware.graphics.allocator-V2-ndk",
         "android.hardware.graphics.mapper@2.0",
         "android.hardware.graphics.mapper@3.0",
@@ -330,6 +375,8 @@ cc_library_shared {
         "rockchip.hardware.hdmi@1.0",
     ],
     static_libs: [
+        "android.hardware.common-V2-ndk",
+        "android.hardware.common.fmq-V1-ndk",
         "android.hardware.camera.common@1.0-helper",
         "libaidlcommonsupport",
         "libft2.nodep"

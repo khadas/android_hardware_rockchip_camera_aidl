@@ -59,6 +59,9 @@ using aidl::android::hardware::camera::device::CameraMetadata;
 using aidl::android::hardware::camera::device::CameraOfflineSessionInfo;
 using aidl::android::hardware::camera::device::CaptureRequest;
 using aidl::android::hardware::camera::device::CaptureResult;
+#ifdef CAMERA_V3_SUPPORT
+using aidl::android::hardware::camera::device::ConfigureStreamsRet;
+#endif // CAMERA_V3_SUPPORT
 using aidl::android::hardware::camera::device::HalStream;
 using aidl::android::hardware::camera::device::ICameraDeviceCallback;
 using aidl::android::hardware::camera::device::ICameraOfflineSession;
@@ -115,6 +118,10 @@ struct CameraDeviceSession : public BnCameraDeviceSession,protected camera3_call
     bool isClosed();
     ScopedAStatus configureStreams(const StreamConfiguration& cfg,
                                    std::vector<HalStream>* halStreamsOut) override;
+#ifdef CAMERA_V3_SUPPORT
+    ScopedAStatus configureStreamsV2(const StreamConfiguration& cfg,
+                                     ConfigureStreamsRet* _aidl_return) override;
+#endif // CAMERA_V3_SUPPORT
     ScopedAStatus constructDefaultRequestSettings(RequestTemplate tpl,
                                                   CameraMetadata* metadata) override;
     ScopedAStatus flush() override;

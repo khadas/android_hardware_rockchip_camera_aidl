@@ -25,7 +25,6 @@
 #include "CameraDevice.h"
 #include "CameraDeviceSession.h"
 #include "debug.h"
-
 #include <utils/Trace.h>
 #include <cutils/properties.h>
 
@@ -375,6 +374,61 @@ std::optional<int> CameraDevice::parsePhysicalId(const std::string_view str) {
         return FAILURE(std::nullopt);
     }
 }
+#ifdef CAMERA_V3_SUPPORT
+// V3 method implementations
+ScopedAStatus CameraDevice::constructDefaultRequestSettings(
+        RequestTemplate in_type, CameraMetadata* _aidl_return) {
+    const camera_metadata_t *rawRequest;
+    int type = (int) in_type;
+    rawRequest = mHwCamera->getDevice()->ops->construct_default_request_settings(mHwCamera->getDevice(), (int) type);
+    if (rawRequest == nullptr) {
+        ALOGI("%s: template %d is not supported on this camera device",
+                __FUNCTION__, type);
+        return toScopedAStatus(Status::ILLEGAL_ARGUMENT);
+    } else {
+        convertToAidl(rawRequest, _aidl_return);
+    }
+    return ScopedAStatus::ok();
+}
+
+ScopedAStatus CameraDevice::isStreamCombinationWithSettingsSupported(
+        const StreamConfiguration& in_streams, bool* _aidl_return) {
+    // For now, just delegate to the existing method
+    return isStreamCombinationSupported(in_streams, _aidl_return);
+}
+
+ScopedAStatus CameraDevice::getSessionCharacteristics(
+        const StreamConfiguration& in_sessionConfig, CameraMetadata* _aidl_return) {
+    CameraMetadata metadata_aidl;
+    struct camera_info info;
+    int ret = mHwCamera->getModule()->getCameraInfo(mCameraIdInt, &info);
+    if (ret != OK) {
+        ALOGE("%s: get camera info failed!", __FUNCTION__);
+        return toScopedAStatus(Status::INTERNAL_ERROR);
+    }
+
+    ::android::hardware::camera::common::V1_0::helper::CameraMetadata metadata;
+    metadata.clear();
+    metadata.append(info.static_camera_characteristics);
+
+    // getSessionCharacteristics should only return vendor-specific characteristics
+    // Create an empty metadata with only vendor tags
+    CameraMetadataMap sessionMetadata;
+    camera_metadata_entry_t getZoomRatioRange = metadata.find(ANDROID_CONTROL_ZOOM_RATIO_RANGE);
+    sessionMetadata[ANDROID_CONTROL_ZOOM_RATIO_RANGE] = getZoomRatioRange;
+
+    camera_metadata_entry_t getScalerAvailableMaxDigitalZoom = metadata.find(ANDROID_SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+    sessionMetadata[ANDROID_SCALER_AVAILABLE_MAX_DIGITAL_ZOOM] = getScalerAvailableMaxDigitalZoom;
+
+    auto maybeMetadata = serializeCameraMetadataMap(sessionMetadata);
+    if (!maybeMetadata.has_value()) {
+        ALOGE("%s: Failed to serialize metadata", __FUNCTION__);
+        return toScopedAStatus(Status::INTERNAL_ERROR);
+    }
+    _aidl_return->metadata = std::move(maybeMetadata.value().metadata);
+    return ScopedAStatus::ok();
+}
+#endif // CAMERA_V3_SUPPORT
 
 }  // namespace implementation
 }  // namespace device

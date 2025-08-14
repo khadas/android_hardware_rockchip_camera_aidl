@@ -64,6 +64,17 @@ struct CameraDevice : public BnCameraDevice {
     ScopedAStatus turnOnTorchWithStrengthLevel(int32_t strength) override;
     ScopedAStatus getTorchStrengthLevel(int32_t* strength) override;
 
+#ifdef CAMERA_V3_SUPPORT
+    // V3 methods
+    ScopedAStatus constructDefaultRequestSettings(
+            RequestTemplate in_type, CameraMetadata* _aidl_return) override;
+    ScopedAStatus isStreamCombinationWithSettingsSupported(
+            const StreamConfiguration& in_streams, bool* _aidl_return) override;
+    ScopedAStatus getSessionCharacteristics(
+            const StreamConfiguration& in_sessionConfig, CameraMetadata* _aidl_return) override;
+
+#endif // CAMERA_V3_SUPPORT
+
     CameraMetadataMap constructDefaultRequestSettings(RequestTemplate tpl) const;
     static Status getAidlStatus(int);
 

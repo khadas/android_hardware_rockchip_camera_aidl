@@ -849,6 +849,21 @@ ScopedAStatus ExternalCameraDeviceSession::configureStreams(
     return fromStatus(Status::OK);
 }
 
+#ifdef CAMERA_V3_SUPPORT
+// V3 method implementations
+ScopedAStatus ExternalCameraDeviceSession::configureStreamsV2(
+        const StreamConfiguration& in_requestedConfiguration,
+        ::aidl::android::hardware::camera::device::ConfigureStreamsRet* _aidl_return) {
+    // For external camera, delegate to the existing configureStreams implementation
+    std::vector<HalStream> halStreams;
+    ScopedAStatus status = configureStreams(in_requestedConfiguration, &halStreams);
+    if (status.isOk()) {
+        _aidl_return->halStreams = std::move(halStreams);
+    }
+    return status;
+}
+#endif // CAMERA_V3_SUPPORT
+
 ScopedAStatus ExternalCameraDeviceSession::flush() {
     ATRACE_CALL();
     Mutex::Autolock _il(mInterfaceLock);
@@ -4991,3 +5006,4 @@ bool ExternalCameraDeviceSession::OutputThread::threadLoop() {
 }  // namespace camera
 }  // namespace hardware
 }  // namespace android
+

@@ -13,27 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-soong_config_module_type {
-    name: "camera_rockchip_soong_gen_defaults",
-    module_type: "cc_defaults",
-    config_namespace: "camera_rockchip",
-    bool_variables: [
-        "virtual",
-    ],
-    properties: ["cflags"],
-}
 
 cc_library_shared {
     name: "android.hardware.camera.provider-V1-external-impl-rk",
-    defaults: ["hidl_defaults"],
+    defaults: ["rockchip_camera_device_aidl_lib_default"],
     proprietary: true,
     srcs: [
         "ExternalCameraProvider.cpp",
     ],
     shared_libs: [
         "android.hardware.camera.common-V1-ndk",
-        "android.hardware.camera.device-V2-ndk",
-        "android.hardware.camera.provider-V2-ndk",
         "android.hardware.graphics.mapper@2.0",
         "android.hardware.graphics.mapper@3.0",
         "android.hardware.graphics.mapper@4.0",
@@ -65,15 +54,13 @@ cc_library_shared {
 
 cc_defaults {
     name: "camera_external_service_rk_defaults",
-    defaults: ["hidl_defaults"],
+    defaults: ["rockchip_camera_device_aidl_lib_default"],
     proprietary: true,
     relative_install_path: "hw",
     srcs: ["external-service.cpp"],
     compile_multilib: "first",
     shared_libs: [
         "android.hardware.camera.common-V1-ndk",
-        "android.hardware.camera.device-V2-ndk",
-        "android.hardware.camera.provider-V2-ndk",
         "android.hardware.camera.provider-V1-external-impl-rk",
         "android.hardware.graphics.mapper@2.0",
         "android.hardware.graphics.mapper@3.0",
@@ -121,7 +108,7 @@ cc_binary {
     relative_install_path: "hw",
     init_rc: ["android.hardware.camera.provider-V1-service.rc"],
     vintf_fragments: ["android.hardware.camera.provider-V1-service.xml"],
-    defaults:["camera_rockchip_gen_defaults"],
+    defaults:["rockchip_camera_device_aidl_lib_default"],
     srcs: [
         "CameraProvider.cpp",
         "main.cpp",
@@ -156,8 +143,6 @@ cc_binary {
         "android.hardware.common-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
         "android.hardware.camera.common-V1-ndk",
-        "android.hardware.camera.device-V2-ndk",
-        "android.hardware.camera.provider-V2-ndk",
         "android.hardware.camera.common@1.0-helper",
         "libaidlcommonsupport",
         "libyuv_static",
@@ -173,6 +158,7 @@ cc_binary {
 
 cc_binary {
     name: "android.hardware.camera.provider-V1-hdmi-service",
+    defaults: ["rockchip_camera_device_aidl_lib_default"],
     vendor: true,
     relative_install_path: "hw",
     init_rc: ["android.hardware.camera.provider-V1-hdmi-service.rc"],
@@ -211,8 +197,6 @@ cc_binary {
         "android.hardware.common-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
         "android.hardware.camera.common-V1-ndk",
-        "android.hardware.camera.device-V2-ndk",
-        "android.hardware.camera.provider-V2-ndk",
         "android.hardware.camera.common@1.0-helper",
         "libaidlcommonsupport",
         "libyuv_static",
@@ -227,6 +211,7 @@ cc_binary {
 
 cc_binary {
     name: "android.hardware.camera.provider-V1-virtual-service",
+    defaults: ["rockchip_camera_device_aidl_lib_default"],
     vendor: true,
     relative_install_path: "hw",
     init_rc: ["android.hardware.camera.provider-V1-virtual-service.rc"],
@@ -265,8 +250,6 @@ cc_binary {
         "android.hardware.common-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
         "android.hardware.camera.common-V1-ndk",
-        "android.hardware.camera.device-V2-ndk",
-        "android.hardware.camera.provider-V2-ndk",
         "android.hardware.camera.common@1.0-helper",
         "libaidlcommonsupport",
         "libyuv_static",
