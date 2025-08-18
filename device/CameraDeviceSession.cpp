@@ -399,9 +399,9 @@ ScopedAStatus CameraDeviceSession::configureStreams(
 
     Mutex::Autolock _l(mInflightLock);
     if (!mInflightBuffers.empty()) {
-        ALOGE("%s: trying to configureStreams while there are still %zu inflight buffers!",
+        ALOGW("%s: trying to configureStreams while there are still %zu inflight buffers!",
                 __FUNCTION__, mInflightBuffers.size());
-        return toScopedAStatus(Status::INTERNAL_ERROR);
+        //return toScopedAStatus(Status::INTERNAL_ERROR);
     }
 
     camera3_stream_configuration_t stream_list{};
