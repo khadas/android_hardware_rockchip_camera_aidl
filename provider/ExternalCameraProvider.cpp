@@ -298,7 +298,17 @@ void ExternalCameraProvider::deviceAdded(const char* devName) {
         ALOGW("%s: Attempt to init camera device %s failed!", __FUNCTION__, devName);
         return;
     }
+
     deviceImpl.reset();
+
+    // Check if devName already exists in mCameraIdMap to avoid duplicate addition
+    for (const auto& pair : mCameraIdMap) {
+        if (pair.second == devName) {
+            ALOGD("%s: Device %s already exists in mCameraIdMap, skipping duplicate addition", __FUNCTION__, devName);
+            return;
+        }
+    }
+
     addExternalCamera(devName,cameraId);
     cameraCount++;
     std::string cameraCount_str = std::to_string(cameraCount);
