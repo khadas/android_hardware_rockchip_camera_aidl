@@ -514,15 +514,24 @@ status_t ExternalCameraDevice::initDefaultCharsKeys(
     UPDATE(ANDROID_LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION, &opticalStabilizationMode, 1);
 
     uint8_t facing = ANDROID_LENS_FACING_EXTERNAL;
+    char property[PROPERTY_VALUE_MAX];
+    property_get("persist.sys.camera_usb_faceback", property, NULL);
+
     if (mCameraId == "0")
     {
        facing = ANDROID_LENS_FACING_BACK;
     }else if (mCameraId == "1"){
        facing = ANDROID_LENS_FACING_FRONT;
     }else{
-       facing = ANDROID_LENS_FACING_EXTERNAL;
+	    if (strstr(property, "1")) {
+	      facing =  ANDROID_LENS_FACING_BACK;
+	    } else if (strstr(property, "0")) {
+	      facing = ANDROID_LENS_FACING_FRONT;
+	    } else {
+	      facing = ANDROID_LENS_FACING_EXTERNAL;
+	    }
     }
-
+    ALOGE("%s: mCameraId = %s facing = %d ", __FUNCTION__, mCameraId.c_str(),facing);
     UPDATE(ANDROID_LENS_FACING, &facing, 1);
 
     // android.noiseReduction
@@ -575,8 +584,11 @@ status_t ExternalCameraDevice::initDefaultCharsKeys(
     // natural display orientation. For devices with natural landscape display (ex: tablet/TV), the
     // orientation should be 0. For devices with natural portrait display (phone), the orientation
     // should be 270.
-    const int32_t orientation = mCfg.orientation;
-    UPDATE(ANDROID_SENSOR_ORIENTATION, &orientation, 1);
+//    const int32_t orientation = mCfg.orientation;
+     property_get("persist.sys.camera_usb_orientation", property, "0");
+     int32_t orientation = atoi(property);
+     ALOGE("%s: orientation = %d ", __FUNCTION__, orientation);
+     UPDATE(ANDROID_SENSOR_ORIENTATION, &orientation, 1);
 
     // android.shading
     const uint8_t availableMode = ANDROID_SHADING_MODE_OFF;
