@@ -528,7 +528,10 @@ status_t ExternalCameraDevice::initDefaultCharsKeys(
 	    } else if (strstr(property, "0")) {
 	      facing = ANDROID_LENS_FACING_FRONT;
 	    } else {
-	      facing = ANDROID_LENS_FACING_EXTERNAL;
+		    const char* dev = mCameraId.c_str();
+		    int index = atoi(dev);
+		    facing = index % 2 ? ANDROID_LENS_FACING_FRONT : ANDROID_LENS_FACING_BACK;
+		    ALOGE("dev:%s index:%d,facing:%d", dev, index, facing);
 	    }
     }
     ALOGE("%s: mCameraId = %s facing = %d ", __FUNCTION__, mCameraId.c_str(),facing);
